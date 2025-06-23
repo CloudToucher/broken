@@ -8,6 +8,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(MSVC)
     add_compile_options(/utf-8)
 endif()
+
+# 编译器优化设置
+if(MSVC)
+    # Debug模式设置
+    set(CMAKE_CXX_FLAGS_DEBUG "/Od /Zi /RTC1 /MDd")
+    
+    # Release模式设置 - 最大优化
+    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /Ob2 /DNDEBUG /MD")
+    
+    # RelWithDebInfo模式 - 优化+调试信息
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/O2 /Ob1 /Zi /DNDEBUG /MD")
+    
+    # 额外优化选项
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_compile_options(/Ot /Oi /Gy /GL)
+        set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG /OPT:REF /OPT:ICF")
+    endif()
+endif()
 # 输出目录结构
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
