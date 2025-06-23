@@ -1,0 +1,102 @@
+#pragma once
+
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
+#include <vector>
+#include <string>
+#include <functional>
+#include <map>
+#include "UIElement.h"
+
+// 元素点击回调函数类型定义
+typedef std::function<void(const UIElement&)> ElementClickCallback;
+
+// 元素渲染区域结构体
+struct ElementRenderRect {
+    float x;
+    float y;
+    float width;
+    float height;
+};
+
+class UIWindow {
+private:
+    bool isVisible;
+    float x;
+    float y;
+    float width;
+    float height;
+    SDL_Color borderColor;
+    Uint8 opacity;
+    std::vector<UIElement> elements;
+    
+    // 存储每个元素的渲染区域
+    std::map<size_t, ElementRenderRect> elementRects;
+    
+    // 用于累计Y轴偏移量
+    float currentYOffset;
+    
+    // 元素点击回调
+    ElementClickCallback elementClickCallback;
+
+    // 字体
+    TTF_Font* titleFont;      // 标题字体
+    TTF_Font* subtitleFont;   // 副标题字体
+    TTF_Font* normalFont;     // 普通文本字体
+
+public:
+    UIWindow(float x, float y, float width, float height, SDL_Color borderColor = {255, 255, 255, 255}, Uint8 opacity = 180);
+    ~UIWindow();
+    
+    // 设置字体
+    void setFonts(TTF_Font* titleFont, TTF_Font* subtitleFont, TTF_Font* normalFont);
+    
+    // 基本属性设置和获取
+    void setVisible(bool visible);
+    bool getVisible() const;
+    void setBorderColor(SDL_Color color);
+    void setOpacity(Uint8 opacity);
+    
+    // 位置和尺寸获取
+    float getX() const { return x; }
+    float getY() const { return y; }
+    float getWidth() const { return width; }
+    float getHeight() const { return height; }
+
+    void setX(float x)  { this->x = x; }
+    void setY(float y)  { this->y = y; }
+    void setWidth(float w)  { this->width=w; }
+    void setHeight(float h)  { this->height=h; }
+    
+    // 元素管理
+    void addElement(const UIElement& element);
+    void clearElements();
+    const std::vector<UIElement>& getElements() const { return elements; }
+    
+    // 设置元素点击回调
+    void setElementClickCallback(ElementClickCallback callback);
+    
+    // 处理点击事件
+    bool handleClick(int mouseX, int mouseY, float windowWidth, float windowHeight);
+    
+    // 获取指定位置下的元素索引，如果没有元素则返回-1
+    int getElementAtPosition(int mouseX, int mouseY) const;
+    
+    // 获取元素渲染区域
+    bool getElementRect(size_t elementIndex, ElementRenderRect& outRect) const;
+    
+    // 更新和渲染
+    void update();
+    void render(SDL_Renderer* renderer, float windowWidth, float windowHeight);
+    
+    // 调试功能：绘制元素边框
+    void renderElementBorders(SDL_Renderer* renderer, SDL_Color borderColor = {255, 0, 0, 255});
+
+    // 获取字体
+    TTF_Font* getTitleFont() const { return titleFont; }
+    TTF_Font* getSubtitleFont() const { return subtitleFont; }
+    TTF_Font* getNormalFont() const { return normalFont; }
+    
+    // 获取字体大小比例
+    float getFontSizeRatio(UIElementType type) const;
+};

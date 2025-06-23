@@ -1,0 +1,24 @@
+# 编译生成的文件
+build/
+out/
+*.exe
+*.dll
+*.pdb
+
+# Visual Studio文件
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+
+# 地图文件（运行时生成）
+map/
+
+# CMake生成的文件
+CMakeCache.txt
+CMakeFiles/
+
+# 临时文件
+*.log
+*.tmp 
