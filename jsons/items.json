@@ -580,10 +580,7 @@
             "value": 120,
             "description": "一把锋利的军用砍刀，刀身采用高碳钢制造，刀柄包裹防滑材料。适合近战和野外生存使用。",
             "weaponType": "MELEE",
-            "primaryAttackMethod": "SLASH",
-            "availableAttackMethods": ["SLASH", "STAB"],
             "damage": 35,
-            "range": 80,
             "attackSpeed": 1.2,
             "criticalChance": 0.12,
             "criticalMultiplier": 2.0,
@@ -602,15 +599,39 @@
             "animationName": "slash_attack",
             "requiredStrength": 8,
             "requiredDexterity": 5,
-            "specialEffects": [
-                {
-                    "type": "KNOCKBACK",
-                    "chance": 0.40,
-                    "duration": 0.0,
-                    "magnitude": 15.0
+            "attackModes": {
+                "primary": {
+                    "shape": "SECTOR",
+                    "angle": 60.0,
+                    "range": 80.0,
+                    "width": 50.0,
+                    "damageMultiplier": 1.0,
+                    "effects": [
+                        {
+                            "type": "BLEEDING",
+                            "chance": 0.35,
+                            "duration": 8.0,
+                            "magnitude": 3.0
+                        }
+                    ]
+                },
+                "secondary": {
+                    "shape": "RECTANGLE",
+                    "angle": 0.0,
+                    "range": 100.0,
+                    "width": 35.0,
+                    "damageMultiplier": 1.2,
+                    "effects": [
+                        {
+                            "type": "KNOCKBACK",
+                            "chance": 0.50,
+                            "duration": 0.0,
+                            "magnitude": 18.0
+                        }
+                    ]
                 }
-            ],
-            "flags": ["WEAPON", "MELEE"]
+            },
+            "flags": ["WEAPON", "MELEE", "SWORD"]
         },
         {
             "name": "战术砍刀",
@@ -620,10 +641,7 @@
             "value": 180,
             "description": "现代战术砍刀，刀身轻便锋利，刀柄人体工学设计，适合快速攻击。",
             "weaponType": "MELEE",
-            "primaryAttackMethod": "QUICK_ATTACK",
-            "availableAttackMethods": ["QUICK_ATTACK", "SLASH"],
             "damage": 30,
-            "range": 70,
             "attackSpeed": 1.5,
             "criticalChance": 0.15,
             "criticalMultiplier": 1.8,
@@ -642,15 +660,45 @@
             "animationName": "quick_slash",
             "requiredStrength": 5,
             "requiredDexterity": 8,
-            "specialEffects": [
-                {
-                    "type": "POISON",
-                    "chance": 0.25,
-                    "duration": 5.0,
-                    "magnitude": 2.0
+            "attackModes": {
+                "primary": {
+                    "shape": "SECTOR",
+                    "angle": 45.0,
+                    "range": 70.0,
+                    "width": 40.0,
+                    "damageMultiplier": 1.0,
+                    "effects": [
+                        {
+                            "type": "POISON",
+                            "chance": 0.30,
+                            "duration": 6.0,
+                            "magnitude": 2.5
+                        },
+                        {
+                            "type": "BLEEDING",
+                            "chance": 0.25,
+                            "duration": 5.0,
+                            "magnitude": 2.0
+                        }
+                    ]
+                },
+                "secondary": {
+                    "shape": "RECTANGLE", 
+                    "angle": 0.0,
+                    "range": 85.0,
+                    "width": 25.0,
+                    "damageMultiplier": 1.1,
+                    "effects": [
+                        {
+                            "type": "POISON",
+                            "chance": 0.45,
+                            "duration": 8.0,
+                            "magnitude": 3.0
+                        }
+                    ]
                 }
-            ],
-            "flags": ["WEAPON", "MELEE"]
+            },
+            "flags": ["WEAPON", "MELEE", "DAGGER"]
         },
         {
             "name": "重型战锤",
@@ -660,10 +708,7 @@
             "value": 300,
             "description": "沉重的双手战锤，能够造成巨大的钝击伤害并击倒敌人。",
             "weaponType": "MELEE",
-            "primaryAttackMethod": "HEAVY_ATTACK",
-            "availableAttackMethods": ["HEAVY_ATTACK"],
             "damage": 60,
-            "range": 90,
             "attackSpeed": 0.7,
             "criticalChance": 0.08,
             "criticalMultiplier": 3.0,
@@ -679,21 +724,255 @@
             "animationName": "heavy_slam",
             "requiredStrength": 15,
             "requiredDexterity": 3,
-            "specialEffects": [
-                {
-                    "type": "STUN",
-                    "chance": 0.30,
-                    "duration": 2.0,
-                    "magnitude": 1.0
+            "attackModes": {
+                "primary": {
+                    "shape": "LARGE_SECTOR",
+                    "angle": 120.0,
+                    "range": 100.0,
+                    "width": 80.0,
+                    "damageMultiplier": 1.0,
+                    "effects": [
+                        {
+                            "type": "STUN",
+                            "chance": 0.40,
+                            "duration": 2.5,
+                            "magnitude": 1.0
+                        },
+                        {
+                            "type": "KNOCKBACK",
+                            "chance": 0.70,
+                            "duration": 0.0,
+                            "magnitude": 30.0
+                        }
+                    ]
                 },
-                {
-                    "type": "KNOCKBACK",
-                    "chance": 0.60,
-                    "duration": 0.0,
-                    "magnitude": 25.0
+                "secondary": {
+                    "shape": "LARGE_SECTOR",
+                    "angle": 150.0,
+                    "range": 120.0,
+                    "width": 100.0,
+                    "damageMultiplier": 1.3,
+                    "effects": [
+                        {
+                            "type": "STUN",
+                            "chance": 0.60,
+                            "duration": 3.0,
+                            "magnitude": 1.0
+                        },
+                        {
+                            "type": "KNOCKBACK",
+                            "chance": 0.80,
+                            "duration": 0.0,
+                            "magnitude": 40.0
+                        }
+                    ]
                 }
-            ],
-            "flags": ["WEAPON", "MELEE"]
+            },
+            "flags": ["WEAPON", "MELEE", "HAMMER"]
+        },
+        {
+            "name": "毒刃匕首",
+            "weight": 0.3,
+            "volume": 0.15,
+            "length": 0.25,
+            "value": 250,
+            "description": "涂有剧毒的精制匕首，每次攻击都有很高概率造成中毒和流血效果。",
+            "weaponType": "MELEE",
+            "damage": 25,
+            "attackSpeed": 2.0,
+            "criticalChance": 0.25,
+            "criticalMultiplier": 2.5,
+            "accuracy": 0.99,
+            "penetration": 8.0,
+            "maxDurability": 80,
+            "durability": 80,
+            "supportsCombo": true,
+            "maxComboCount": 5,
+            "comboWindow": 1.5,
+            "comboDamageBonus": 0.2,
+            "attackSound": "dagger_slice.wav",
+            "hitSound": "poison_hit.wav",
+            "criticalSound": "poison_crit.wav",
+            "animationSpeed": 1.8,
+            "animationName": "quick_stab",
+            "requiredStrength": 3,
+            "requiredDexterity": 12,
+            "attackModes": {
+                "primary": {
+                    "shape": "SECTOR",
+                    "angle": 30.0,
+                    "range": 60.0,
+                    "width": 30.0,
+                    "damageMultiplier": 1.0,
+                    "effects": [
+                        {
+                            "type": "POISON",
+                            "chance": 0.70,
+                            "duration": 10.0,
+                            "magnitude": 4.0
+                        },
+                        {
+                            "type": "BLEEDING",
+                            "chance": 0.60,
+                            "duration": 8.0,
+                            "magnitude": 3.0
+                        }
+                    ]
+                },
+                "secondary": {
+                    "shape": "RECTANGLE",
+                    "angle": 0.0,
+                    "range": 80.0,
+                    "width": 20.0,
+                    "damageMultiplier": 1.3,
+                    "effects": [
+                        {
+                            "type": "POISON",
+                            "chance": 0.90,
+                            "duration": 15.0,
+                            "magnitude": 6.0
+                        }
+                    ]
+                }
+            },
+            "flags": ["WEAPON", "MELEE", "DAGGER"]
+        },
+        {
+            "name": "雷神之锤",
+            "weight": 4.0,
+            "volume": 1.2,
+            "length": 0.8,
+            "value": 800,
+            "description": "传说中的巨锤，每次攻击都会产生雷电效果，能够眩晕大范围的敌人。",
+            "weaponType": "MELEE",
+            "damage": 80,
+            "attackSpeed": 0.5,
+            "criticalChance": 0.15,
+            "criticalMultiplier": 4.0,
+            "accuracy": 0.75,
+            "penetration": 25.0,
+            "maxDurability": 200,
+            "durability": 200,
+            "supportsCombo": false,
+            "attackSound": "thunder_slam.wav",
+            "hitSound": "lightning_impact.wav",
+            "criticalSound": "thunder_crit.wav",
+            "animationSpeed": 0.6,
+            "animationName": "thunder_slam",
+            "requiredStrength": 20,
+            "requiredDexterity": 2,
+            "attackModes": {
+                "primary": {
+                    "shape": "LARGE_SECTOR",
+                    "angle": 180.0,
+                    "range": 150.0,
+                    "width": 120.0,
+                    "damageMultiplier": 1.0,
+                    "effects": [
+                        {
+                            "type": "STUN",
+                            "chance": 0.80,
+                            "duration": 3.0,
+                            "magnitude": 1.0
+                        },
+                        {
+                            "type": "KNOCKBACK",
+                            "chance": 0.95,
+                            "duration": 0.0,
+                            "magnitude": 50.0
+                        }
+                    ]
+                },
+                "secondary": {
+                    "shape": "LARGE_SECTOR",
+                    "angle": 240.0,
+                    "range": 200.0,
+                    "width": 160.0,
+                    "damageMultiplier": 1.5,
+                    "effects": [
+                        {
+                            "type": "STUN",
+                            "chance": 1.0,
+                            "duration": 5.0,
+                            "magnitude": 1.0
+                        },
+                        {
+                            "type": "KNOCKBACK",
+                            "chance": 1.0,
+                            "duration": 0.0,
+                            "magnitude": 80.0
+                        }
+                    ]
+                }
+            },
+            "flags": ["WEAPON", "MELEE", "HAMMER"]
+        },
+        {
+            "name": "流血长剑",
+            "weight": 1.2,
+            "volume": 0.4,
+            "length": 0.5,
+            "value": 400,
+            "description": "锋利的长剑，专门用于造成大量流血伤害，左键精准攻击，右键长距离刺击。",
+            "weaponType": "MELEE",
+            "damage": 45,
+            "attackSpeed": 1.0,
+            "criticalChance": 0.18,
+            "criticalMultiplier": 2.3,
+            "accuracy": 0.92,
+            "penetration": 12.0,
+            "maxDurability": 120,
+            "durability": 120,
+            "supportsCombo": true,
+            "maxComboCount": 3,
+            "comboWindow": 2.5,
+            "comboDamageBonus": 0.18,
+            "attackSound": "sword_slash.wav",
+            "hitSound": "sword_cut.wav",
+            "criticalSound": "sword_crit.wav",
+            "animationSpeed": 1.1,
+            "animationName": "sword_combo",
+            "requiredStrength": 10,
+            "requiredDexterity": 8,
+            "attackModes": {
+                "primary": {
+                    "shape": "SECTOR",
+                    "angle": 50.0,
+                    "range": 90.0,
+                    "width": 60.0,
+                    "damageMultiplier": 1.0,
+                    "effects": [
+                        {
+                            "type": "BLEEDING",
+                            "chance": 0.80,
+                            "duration": 12.0,
+                            "magnitude": 5.0
+                        }
+                    ]
+                },
+                "secondary": {
+                    "shape": "RECTANGLE",
+                    "angle": 0.0,
+                    "range": 140.0,
+                    "width": 30.0,
+                    "damageMultiplier": 1.4,
+                    "effects": [
+                        {
+                            "type": "BLEEDING",
+                            "chance": 0.95,
+                            "duration": 15.0,
+                            "magnitude": 8.0
+                        },
+                        {
+                            "type": "KNOCKBACK",
+                            "chance": 0.30,
+                            "duration": 0.0,
+                            "magnitude": 20.0
+                        }
+                    ]
+                }
+            },
+            "flags": ["WEAPON", "MELEE", "SWORD"]
         }
     ]
 }

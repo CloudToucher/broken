@@ -1,6 +1,8 @@
 #include "UIWindow.h"
 #include <SDL3/SDL.h>
 #include <iostream>
+#include <algorithm>
+#include <sstream>
 
 UIWindow::UIWindow(float x, float y, float width, float height, SDL_Color borderColor, Uint8 opacity) :
     isVisible(true),
@@ -14,7 +16,10 @@ UIWindow::UIWindow(float x, float y, float width, float height, SDL_Color border
     elementClickCallback(nullptr),
     titleFont(nullptr),
     subtitleFont(nullptr),
-    normalFont(nullptr) {
+    normalFont(nullptr),
+    maxContentWidth(400.0f),
+    padding(20.0f),
+    autoResize(false) {
     // 字体将由GameUI设置
 }
 
@@ -29,6 +34,155 @@ void UIWindow::setFonts(TTF_Font* titleFont, TTF_Font* subtitleFont, TTF_Font* n
     this->titleFont = titleFont;
     this->subtitleFont = subtitleFont;
     this->normalFont = normalFont;
+}
+
+// 计算文本宽度
+float UIWindow::calculateTextWidth(const std::string& text, TTF_Font* font) const {
+    if (!font || text.empty()) return 0.0f;
+    
+    int width = 0;
+    TTF_GetStringSize(font, text.c_str(), 0, &width, nullptr);
+    return static_cast<float>(width);
+}
+
+// 计算文本高度
+float UIWindow::calculateTextHeight(TTF_Font* font) const {
+    if (!font) return 0.0f;
+    
+    return static_cast<float>(TTF_GetFontHeight(font));
+}
+
+// 文本换行
+std::vector<WrappedTextLine> UIWindow::wrapText(const std::string& text, TTF_Font* font, float maxWidth) const {
+    std::vector<WrappedTextLine> lines;
+    if (!font || text.empty()) {
+        return lines;
+    }
+    
+    // 按空格分割文本
+    std::istringstream iss(text);
+    std::vector<std::string> words;
+    std::string word;
+    while (iss >> word) {
+        words.push_back(word);
+    }
+    
+    if (words.empty()) {
+        // 如果没有单词，但文本不为空（可能只有空格），创建一个空行
+        WrappedTextLine line;
+        line.text = text;
+        line.width = calculateTextWidth(text, font);
+        line.height = calculateTextHeight(font);
+        lines.push_back(line);
+        return lines;
+    }
+    
+    std::string currentLine = words[0];
+    float currentLineWidth = calculateTextWidth(currentLine, font);
+    
+    for (size_t i = 1; i < words.size(); ++i) {
+        std::string testLine = currentLine + " " + words[i];
+        float testWidth = calculateTextWidth(testLine, font);
+        
+        if (testWidth <= maxWidth) {
+            // 可以添加到当前行
+            currentLine = testLine;
+            currentLineWidth = testWidth;
+        } else {
+            // 需要换行
+            WrappedTextLine line;
+            line.text = currentLine;
+            line.width = currentLineWidth;
+            line.height = calculateTextHeight(font);
+            lines.push_back(line);
+            
+            // 开始新行
+            currentLine = words[i];
+            currentLineWidth = calculateTextWidth(currentLine, font);
+        }
+    }
+    
+    // 添加最后一行
+    if (!currentLine.empty()) {
+        WrappedTextLine line;
+        line.text = currentLine;
+        line.width = currentLineWidth;
+        line.height = calculateTextHeight(font);
+        lines.push_back(line);
+    }
+    
+    return lines;
+}
+
+// 计算布局
+LayoutCalculationResult UIWindow::calculateLayout() const {
+    LayoutCalculationResult result;
+    result.totalWidth = 0.0f;
+    result.totalHeight = padding; // 从上边距开始
+    result.elementLines.clear();
+    
+    for (const auto& element : elements) {
+        // 选择字体
+        TTF_Font* font = nullptr;
+        switch (element.getType()) {
+            case UIElementType::TITLE:
+                font = titleFont;
+                break;
+            case UIElementType::SUBTITLE:
+                font = subtitleFont;
+                break;
+            case UIElementType::TEXT:
+            default:
+                font = normalFont;
+                break;
+        }
+        
+        if (!font) continue;
+        
+        // 计算文本换行
+        std::vector<WrappedTextLine> lines = wrapText(element.getText(), font, maxContentWidth);
+        result.elementLines.push_back(lines);
+        
+        // 计算最大宽度
+        for (const auto& line : lines) {
+            result.totalWidth = std::max(result.totalWidth, line.width + element.getXOffset());
+        }
+        
+        // 累加高度
+        for (const auto& line : lines) {
+            result.totalHeight += line.height;
+        }
+        
+        // 添加元素的Y偏移量
+        result.totalHeight += element.getYOffset();
+    }
+    
+    // 添加下边距
+    result.totalHeight += padding;
+    
+    // 确保最小宽度包含左右边距
+    result.totalWidth = std::max(result.totalWidth + 2 * padding, 200.0f);
+    
+    return result;
+}
+
+// 自动调整窗口大小以适应内容
+void UIWindow::autoSizeToContent() {
+    if (!autoResize) return;
+    
+    LayoutCalculationResult layout = calculateLayout();
+    setWidth(layout.totalWidth);
+    setHeight(layout.totalHeight);
+}
+
+// 居中显示在屏幕上
+void UIWindow::centerOnScreen(float screenWidth, float screenHeight) {
+    if (autoResize) {
+        autoSizeToContent();
+    }
+    
+    setX((screenWidth - getWidth()) / 2.0f);
+    setY((screenHeight - getHeight()) / 2.0f);
 }
 
 void UIWindow::setVisible(bool visible) {
@@ -129,6 +283,115 @@ void UIWindow::update() {
     // 例如动画效果、元素状态更新等
 }
 
+// 带文本换行的渲染方法
+void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, float windowHeight) {
+    if (!isVisible) return;
+    
+    // 注意：不在渲染时调用autoSizeToContent，应该在设置内容时就调整好大小和位置
+    
+    // 绘制半透明背景
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, opacity);
+    SDL_FRect bgRect = {x, y, width, height};
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_RenderFillRect(renderer, &bgRect);
+    
+    // 绘制边框
+    SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
+    SDL_RenderRect(renderer, &bgRect);
+    
+    // 重置Y轴累计偏移量
+    currentYOffset = padding;
+    
+    // 清空元素渲染区域映射
+    elementRects.clear();
+    
+    // 计算布局
+    LayoutCalculationResult layout = calculateLayout();
+    
+    // 渲染所有元素（带换行）
+    for (size_t i = 0; i < elements.size() && i < layout.elementLines.size(); ++i) {
+        const auto& element = elements[i];
+        const auto& lines = layout.elementLines[i];
+        
+        // 根据元素类型选择合适的字体
+        TTF_Font* font = nullptr;
+        switch (element.getType()) {
+            case UIElementType::TITLE:
+                font = titleFont;
+                break;
+            case UIElementType::SUBTITLE:
+                font = subtitleFont;
+                break;
+            case UIElementType::TEXT:
+            default:
+                font = normalFont;
+                break;
+        }
+        
+        // 确保字体已加载
+        if (!font) continue;
+        
+        // 记录该元素的渲染区域开始位置
+        float elementStartY = currentYOffset;
+        float elementMaxWidth = 0.0f;
+        float elementTotalHeight = 0.0f;
+        
+        // 渲染每一行
+        for (const auto& line : lines) {
+            if (line.text.empty()) {
+                // 空行，只增加高度
+                currentYOffset += line.height;
+                elementTotalHeight += line.height;
+                continue;
+            }
+            
+            // 创建文本表面
+            SDL_Surface* textSurface = TTF_RenderText_Solid(font, line.text.c_str(), 0, element.getColor());
+            if (textSurface) {
+                // 创建纹理
+                SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+                if (textTexture) {
+                    // 计算渲染位置
+                    SDL_FRect renderRect = {
+                        x + padding + element.getXOffset(),
+                        y + currentYOffset,
+                        static_cast<float>(textSurface->w),
+                        static_cast<float>(textSurface->h)
+                    };
+                    
+                    // 渲染文本
+                    SDL_RenderTexture(renderer, textTexture, nullptr, &renderRect);
+                    
+                    // 更新元素最大宽度
+                    elementMaxWidth = std::max(elementMaxWidth, renderRect.w);
+                    
+                    // 释放纹理
+                    SDL_DestroyTexture(textTexture);
+                }
+                
+                // 释放表面
+                SDL_DestroySurface(textSurface);
+            }
+            
+            // 移动到下一行
+            currentYOffset += line.height;
+            elementTotalHeight += line.height;
+        }
+        
+        // 存储整个元素的渲染区域（包含所有行）
+        elementRects[i] = {
+            x + padding + element.getXOffset(),
+            y + elementStartY,
+            elementMaxWidth,
+            elementTotalHeight
+        };
+        
+        // 添加元素的Y偏移量
+        currentYOffset += element.getYOffset();
+    }
+}
+
+// 原始渲染方法（保持向后兼容）
 void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHeight) {
     if (!isVisible) return;
     

@@ -36,7 +36,8 @@ enum class AttackShape {
     CIRCLE,             // 圆形（默认）
     SECTOR,             // 扇形
     RECTANGLE,          // 长条形
-    LINE                // 直线
+    LINE,               // 直线
+    LARGE_SECTOR        // 超大范围扇形
 };
 
 // 攻击参数结构体
@@ -59,9 +60,16 @@ struct AttackParams {
     // 特殊效果
     bool canBleed;                  // 能否造成流血
     bool canStun;                   // 能否造成眩晕
+    bool canPoison;                 // 能否造成中毒
+    bool canKnockback;              // 能否造成击退
     float bleedChance;              // 流血概率
     float stunChance;               // 眩晕概率
+    float poisonChance;             // 中毒概率
+    float knockbackChance;          // 击退概率
     int stunDuration;               // 眩晕持续时间（毫秒）
+    int poisonDuration;             // 中毒持续时间（毫秒）
+    float poisonDamage;             // 中毒每秒伤害
+    float knockbackForce;           // 击退力度
     
     // 音效和动画
     std::string soundFile;          // 攻击音效
@@ -74,7 +82,9 @@ struct AttackParams {
         criticalChance(0.05f), criticalMultiplier(2.0f),
         damageType("blunt"), armorPenetration(0),
         shape(AttackShape::CIRCLE), width(50.0f), angle(1.047f), direction(0.0f), // 默认60度扇形
-        canBleed(false), canStun(false), bleedChance(0.0f), stunChance(0.0f), stunDuration(1000),
+        canBleed(false), canStun(false), canPoison(false), canKnockback(false),
+        bleedChance(0.0f), stunChance(0.0f), poisonChance(0.0f), knockbackChance(0.0f),
+        stunDuration(1000), poisonDuration(5000), poisonDamage(2.0f), knockbackForce(10.0f),
         soundFile(""), animationName(""), animationDuration(500) {}
 };
 
@@ -85,10 +95,13 @@ struct AttackResult {
     int totalDamage;                // 总伤害
     bool causedBleeding;            // 是否造成流血
     bool causedStun;                // 是否造成眩晕
+    bool causedPoison;              // 是否造成中毒
+    bool causedKnockback;           // 是否造成击退
     Entity* target;                 // 攻击目标
     
     AttackResult() : hit(false), critical(false), totalDamage(0), 
-                    causedBleeding(false), causedStun(false), target(nullptr) {}
+                    causedBleeding(false), causedStun(false), causedPoison(false), 
+                    causedKnockback(false), target(nullptr) {}
 };
 
 // 通用攻击系统类

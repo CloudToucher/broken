@@ -4,7 +4,7 @@
 #include "Map.h"
 #include "Action.h"
 #include "Entity.h"
-#include "Machete.h"
+#include "MeleeWeapon.h"
 #include <string>
 #include <vector>
 
@@ -424,12 +424,12 @@ void HUD::renderComboInfo(SDL_Renderer* renderer, Player* player) {
         return;
     }
     
-    Machete* machete = dynamic_cast<Machete*>(heldItem);
-    if (!machete) {
+    MeleeWeapon* meleeWeapon = dynamic_cast<MeleeWeapon*>(heldItem);
+    if (!meleeWeapon) {
         return;
     }
     
-    int comboCount = machete->getComboCount();
+    int comboCount = meleeWeapon->getComboCount();
     if (comboCount <= 0) {
         return; // 没有连击时不显示
     }

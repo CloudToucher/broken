@@ -21,8 +21,7 @@ Machete::Machete()
     addFlag(ItemFlag::MELEE);
     addFlag(ItemFlag::TOOL); // 砍刀也是工具
     
-    // 设置装备槽位
-    addEquipSlot(EquipSlot::RIGHT_HAND);
+    // 武器只有在手持时才发挥作用，不设置装备槽位
     
     // 设置伤害类型
     setSlashingDamage(35);              // 砍击伤害

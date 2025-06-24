@@ -57,6 +57,13 @@ enum class ItemFlag {
     THROWABLE,          // 投掷武器
     GUNMOD,             // 枪械配件
     
+    // 近战武器子类型标签
+    SWORD,              // 剑类
+    AXE,                // 斧类
+    HAMMER,             // 锤类
+    SPEAR,              // 矛类
+    DAGGER,             // 匕首类
+    
     // 枪械类型标签
     PISTOL,             // 手枪
     REVOLVER,           // 左轮手枪
@@ -100,6 +107,9 @@ enum class ItemFlag {
     SCOPE,              // 带瞄准镜
     LASER,              // 带激光瞄准器
     FLASHLIGHT,         // 带手电筒
+    
+    // 必须是最后一个元素，用于循环计数
+    FLAG_COUNT
 };
 
 // 获取标签的字符串表示
@@ -155,6 +165,13 @@ inline std::string GetItemFlagName(ItemFlag flag) {
         case ItemFlag::MELEE: return "近战武器";
         case ItemFlag::THROWABLE: return "投掷武器";
         case ItemFlag::GUNMOD: return "枪械配件";
+        
+        // 近战武器子类型标签
+        case ItemFlag::SWORD: return "剑类";
+        case ItemFlag::AXE: return "斧类";
+        case ItemFlag::HAMMER: return "锤类";
+        case ItemFlag::SPEAR: return "矛类";
+        case ItemFlag::DAGGER: return "匕首类";
         
         // 枪械类型标签
         case ItemFlag::PISTOL: return "手枪";

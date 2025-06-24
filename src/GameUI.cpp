@@ -57,7 +57,11 @@ GameUI::GameUI()
       playerWindow(nullptr), hoveredItem(nullptr), mouseX(0), mouseY(0),
       itemTooltipWindow(nullptr), currentPlayer(nullptr),
       isDragging(false), draggedItem(nullptr), sourceStorage(nullptr),
-      dragStartX(0), dragStartY(0) {
+      dragStartX(0), dragStartY(0), handSlotRectValid(false),
+  
+      pendingHeldItemToReplace(nullptr), pendingNewItemToHold(nullptr), pendingNewItemSource(nullptr),
+      confirmationWindow(nullptr), isConfirmationVisible(false), 
+      confirmationCallback(nullptr), originalTimeScaleBeforeConfirmation(1.0f) {
     // 构造函数中不再创建itemTooltipWindow，移到initFonts方法中
 }
 
@@ -113,6 +117,23 @@ bool GameUI::initFonts() {
     itemTooltipWindow->setVisible(false);
     // 设置物品提示框窗口的字体
     itemTooltipWindow->setFonts(titleFont, subtitleFont, tooltipFont);
+    
+
+    
+    // 创建确认对话框窗口 - 启用自动调整大小
+    confirmationWindow = std::make_unique<UIWindow>(0.0f, 0.0f, 500.0f, 250.0f, 
+                                                   SDL_Color{200, 200, 200, 255}, // 浅灰色边框
+                                                   220); // 半透明度
+    confirmationWindow->setVisible(false);
+    confirmationWindow->setElementClickCallback([this](const UIElement& element) {
+        this->handleConfirmationClick(element);
+    });
+    confirmationWindow->setFonts(titleFont, subtitleFont, itemFont);
+    
+    // 配置确认框的自动布局参数
+    confirmationWindow->setAutoResize(true);
+    confirmationWindow->setPadding(25.0f); // 内边距
+    // maxContentWidth 将在显示时动态设置为屏幕宽度的1/4
     
     return true;
 }
@@ -421,7 +442,13 @@ void GameUI::updatePlayerUI(Player* player) {
             formatFloat(storage->getMaxVolume()) + " 体积";
         
         // 添加折叠/展开按钮 - 放在存储空间信息前面，这样会显示在同一行
-        UIElement collapseButton(storage->getIsCollapsed() ? "+" : "-", playerWindow->getWidth() - 50.0f, 0.0f, 
+        // 考虑到UIElement的X坐标会被fontSizeRatio(1.3)缩放，需要预先除以缩放比例
+        float fontSizeRatio = 1.3f; // TEXT类型的字体大小比例
+        float targetButtonX = playerWindow->getWidth() - 40.0f; // 目标位置
+        float buttonX = targetButtonX / fontSizeRatio; // 补偿缩放效果
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "折叠按钮位置: 窗体宽度=%.1f, 目标X=%.1f, 补偿后X=%.1f, 比例=%.1f", 
+                   playerWindow->getWidth(), targetButtonX, buttonX, fontSizeRatio);
+        UIElement collapseButton(storage->getIsCollapsed() ? "+" : "-", buttonX, 0.0f, 
                                 storage->getIsCollapsed() ? SDL_Color{255, 150, 150, 255} : SDL_Color{200, 200, 200, 255},
                                 UIElementType::TEXT);
         collapseButton.setDataPtr(storage);
@@ -489,6 +516,9 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
         // 更新存储空间坐标映射
         updateStorageCoordinatesMap();
         
+        // 更新手持位坐标
+        updateHandSlotRect();
+        
         // 如果正在拖拽物品，显示可以容纳该物品的存储空间的绿色边框
         if (isDragging && draggedItem) {            
             // 遍历所有存储空间
@@ -544,6 +574,53 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
                 }
             }
             
+            // 绘制手持位边框（只有在没有手持物品且正在拖拽来自存储空间的物品时才显示）
+            // 使用当前渲染的player而不是currentPlayer，确保状态一致性
+            Player* renderPlayer = Game::getInstance()->getPlayer();
+            if (sourceStorage && renderPlayer && !renderPlayer->getHeldItem() && handSlotRectValid) {
+                // 使用动态计算的手持位区域
+                // 设置橙色边框表示手持位
+                SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255); // 橙色
+                
+                // 绘制手持位边框（铺满整个窗口宽度）
+                float windowX = playerWindow->getX();
+                float windowWidth = playerWindow->getWidth();
+                
+                SDL_FRect leftBorder = {
+                    windowX + 10.0f, // 从窗口左边距开始
+                    handSlotRect.y,
+                    3.0f,
+                    handSlotRect.height
+                };
+                
+                SDL_FRect rightBorder = {
+                    windowX + windowWidth - 13.0f, // 到窗口右边距结束
+                    handSlotRect.y,
+                    3.0f,
+                    handSlotRect.height
+                };
+                
+                SDL_FRect topBorder = {
+                    windowX + 10.0f, // 从窗口左边距开始
+                    handSlotRect.y,
+                    windowWidth - 20.0f, // 铺满整个窗口宽度（减去边距）
+                    3.0f
+                };
+                
+                SDL_FRect bottomBorder = {
+                    windowX + 10.0f, // 从窗口左边距开始
+                    handSlotRect.y + handSlotRect.height - 3.0f,
+                    windowWidth - 20.0f, // 铺满整个窗口宽度（减去边距）
+                    3.0f
+                };
+                
+                // 绘制边框
+                SDL_RenderFillRect(renderer, &leftBorder);
+                SDL_RenderFillRect(renderer, &rightBorder);
+                SDL_RenderFillRect(renderer, &topBorder);
+                SDL_RenderFillRect(renderer, &bottomBorder);
+            }
+            
             // 显示有效存储空间数量
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
             SDL_FRect debugRect2 = {10, 35, 300, 20};
@@ -567,6 +644,13 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
     
     // 渲染物品提示框（无论玩家UI是否可见，物品提示框都可以显示）
     renderItemTooltip(renderer, windowWidth, windowHeight);
+    
+
+    
+    // 渲染确认对话框（如果可见，优先级最高）
+    if (isConfirmationVisible && confirmationWindow) {
+        confirmationWindow->renderWithWrapping(renderer, windowWidth, windowHeight);
+    }
     
     // 如果正在拖拽物品，在鼠标位置绘制物品名称
     if (isDragging && draggedItem) {
@@ -602,6 +686,15 @@ void GameUI::updateHoveredItem(int mouseX, int mouseY) {
     // 保存鼠标位置
     this->mouseX = mouseX;
     this->mouseY = mouseY;
+
+    // 如果确认对话框可见，不更新悬停物品
+    if (isConfirmationVisible) {
+        hoveredItem = nullptr;
+        if (itemTooltipWindow) {
+            itemTooltipWindow->setVisible(false);
+        }
+        return;
+    }
 
     // 重置悬停物品指针
     hoveredItem = nullptr;
@@ -924,6 +1017,17 @@ bool GameUI::handleClick(int mouseX, int mouseY, Player* player, float windowWid
         currentPlayer = player;
     }
     
+    // 最优先检查确认对话框（模态对话框）
+    if (isConfirmationVisible && confirmationWindow) {
+        if (confirmationWindow->handleClick(mouseX, mouseY, windowWidth, windowHeight)) {
+            return true; // 点击被确认对话框处理了
+        }
+        // 如果确认对话框可见但点击不在其范围内，阻止其他UI交互
+        return true;
+    }
+    
+
+    
     // 检查玩家背包UI
     if (isUIVisible && playerWindow) {
         // 检查是否点击了物品元素
@@ -1091,6 +1195,11 @@ Storage* GameUI::findStorageByCoordinates(int x, int y) {
 }
 
 bool GameUI::handleMouseMotion(int mouseX, int mouseY, float windowWidth, float windowHeight) {
+    // 如果任何模态对话框可见，阻止鼠标移动事件处理
+    if (isConfirmationVisible) {
+        return true; // 事件被处理，阻止进一步传播
+    }
+    
     // 更新鼠标位置
     this->mouseX = mouseX;
     this->mouseY = mouseY;
@@ -1170,6 +1279,15 @@ void GameUI::updateStorageCoordinatesMap() {
 }
 
 bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float windowWidth, float windowHeight) {
+    // 如果任何模态对话框可见，阻止拖拽操作
+    if (isConfirmationVisible) {
+        // 如果有拖拽状态，取消拖拽
+        isDragging = false;
+        draggedItem = nullptr;
+        sourceStorage = nullptr;
+        return true; // 事件被处理
+    }
+    
     // 如果没有正在拖拽，直接返回
     if (!isDragging || !draggedItem || !player) {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "拖拽状态无效: isDragging=%d, draggedItem=%p, player=%p",
@@ -1224,59 +1342,32 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     // 检查是否拖拽到手持位置
     bool droppedOnHeldItemSlot = false;
     
-    // 获取玩家窗口的位置和尺寸
-    if (playerWindow && playerWindow->getVisible()) {
+    // 更新手持位坐标
+    updateHandSlotRect();
+    
+    // 检查是否拖拽到手持位置（使用铺满窗口宽度的范围，与橙色框一致）
+    if (handSlotRectValid && playerWindow) {
         float windowX = playerWindow->getX();
-        float windowY = playerWindow->getY();
         float windowWidth = playerWindow->getWidth();
         
-        // 手持物品区域的Y坐标范围（根据UI布局估算）
-        float handSlotStartY = windowY + 105.0f; // 标题 + 手持物品标题的高度
-        float handSlotEndY = handSlotStartY + 32.0f; // 手持物品元素的高度
+        // 使用与橙色框相同的检测范围：铺满整个窗口宽度
+        float detectStartX = windowX + 10.0f;
+        float detectEndX = windowX + windowWidth - 10.0f;
         
-        // 装备区域的Y坐标范围（根据UI布局估算）
-        float equipStartY = handSlotEndY + 65.0f; // 手持区域 + 间距 + 装备标题
-        float equipEndY = equipStartY + 12 * 32.0f; // 12个槽位 * 每个槽位的高度
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位检测: 鼠标(%d,%d), 手持区域(%.1f-%.1f,%.1f,%.1f)", 
+                   mouseX, mouseY, 
+                   detectStartX, detectEndX, handSlotRect.y, handSlotRect.height);
         
-        // 检查是否拖拽到手持位置
-        if (mouseY >= handSlotStartY && mouseY <= handSlotEndY && 
-            mouseX >= windowX + 40.0f && mouseX <= windowX + windowWidth - 20.0f) {
+        if (mouseX >= detectStartX && mouseX <= detectEndX &&
+            mouseY >= handSlotRect.y && mouseY <= handSlotRect.y + handSlotRect.height) {
             droppedOnHeldItemSlot = true;
-            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到手持位置");
-        }
-        
-        // 检查是否拖拽到装备位置，并确定具体的装备槽位
-        if (mouseY >= equipStartY && mouseY <= equipEndY && 
-            mouseX >= windowX + 40.0f && mouseX <= windowX + windowWidth - 20.0f) {
-            
-            // 计算拖拽到哪个装备槽位
-            int slotIndex = static_cast<int>((mouseY - equipStartY) / 32.0f);
-            
-            // 确保槽位索引在有效范围内
-            if (slotIndex >= 0 && slotIndex < 12) {
-                droppedOnEquipmentSlot = true;
-                
-                // 根据索引确定装备槽位
-                switch (slotIndex) {
-                    case 0: targetEquipSlot = EquipSlot::HEAD; break;
-                    case 1: targetEquipSlot = EquipSlot::CHEST; break;
-                    case 2: targetEquipSlot = EquipSlot::ABDOMEN; break;
-                    case 3: targetEquipSlot = EquipSlot::LEFT_LEG; break;
-                    case 4: targetEquipSlot = EquipSlot::RIGHT_LEG; break;
-                    case 5: targetEquipSlot = EquipSlot::LEFT_FOOT; break;
-                    case 6: targetEquipSlot = EquipSlot::RIGHT_FOOT; break;
-                    case 7: targetEquipSlot = EquipSlot::LEFT_ARM; break;
-                    case 8: targetEquipSlot = EquipSlot::RIGHT_ARM; break;
-                    case 9: targetEquipSlot = EquipSlot::LEFT_HAND; break;
-                    case 10: targetEquipSlot = EquipSlot::RIGHT_HAND; break;
-                    case 11: targetEquipSlot = EquipSlot::BACK; break;
-                    default: targetEquipSlot = EquipSlot::NONE; break;
-                }
-                
-                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到装备位置，槽位: %d", static_cast<int>(targetEquipSlot));
-            }
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到手持位置（铺满窗口宽度）");
         }
     }
+        
+        // TODO: 装备槽位检测需要实现动态计算，暂时注释掉硬编码的检测逻辑
+        // 检查是否拖拽到装备位置，并确定具体的装备槽位
+        // （装备槽位的动态计算比手持位更复杂，将在后续版本实现）
     
     // 如果拖拽到装备位置
     if (droppedOnEquipmentSlot && !isEquippedItem && !isHeldItem && sourceStorage) {
@@ -1304,10 +1395,17 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     }
     // 如果拖拽到手持位置
     else if (droppedOnHeldItemSlot && !isEquippedItem && !isHeldItem && sourceStorage) {
-        // 使用Player的holdItemFromStorage方法尝试手持物品
-        player->holdItemFromStorage(draggedItem, sourceStorage);
-        
-        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "尝试将物品设置为手持物品");
+        // 检查玩家是否已经手持物品
+        Item* currentHeldItem = player->getHeldItem();
+        if (currentHeldItem) {
+            // 如果已有手持物品，显示存储选择确认框
+            showStorageSelectionConfirmationDialog(currentHeldItem, draggedItem, sourceStorage);
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "已有手持物品，显示存储选择确认框");
+        } else {
+            // 如果没有手持物品，直接手持新物品
+            player->holdItemFromStorage(draggedItem, sourceStorage);
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "尝试将物品设置为手持物品");
+        }
     }
     // 如果找到了目标存储空间
     else if (targetStorage) {
@@ -1353,44 +1451,24 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
             }
             // 如果是手持物品
             else if (isHeldItem) {
-                // 获取手持物品的引用
-                Item* heldItem = player->getHeldItem();
-                if (heldItem) {
-                    // 创建一个临时变量来存储物品名称，用于日志
-                    std::string itemName = heldItem->getName();
-
-                    // 检查目标存储空间是否可以容纳该物品
-                    if (targetStorage->canFitItem(heldItem)) {
-                        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "目标存储空间可以容纳手持物品: %s", itemName.c_str());
-
-                        // 先将手持物品设置为nullptr，相当于卸下手持物品
-                        player->unequipItem(EquipSlot::RIGHT_HAND, [this, player, targetStorage, itemName](std::unique_ptr<Item> unequippedItem) {
-                            if (unequippedItem) {
-                                // 卸下成功，将物品放入目标存储空间
-                                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "成功卸下手持物品: %s，正在放入目标存储空间", itemName.c_str());
-
-                                // 将物品放入目标存储空间
-                                bool addResult = targetStorage->addItem(std::move(unequippedItem));
-                                if (addResult) {
-                                    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "成功将手持物品放入目标存储空间");
-                                }
-                                else {
-                                    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "无法将手持物品放入目标存储空间");
-                                }
-
-                                // 更新UI
-                                updatePlayerUI(player);
-                            }
-                            else {
-                                // 卸下失败
-                                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持物品卸下失败");
-                            }
-                            });
+                // 使用行动队列：先卸下手持物品，然后存储到目标存储空间
+                player->unequipItem(EquipSlot::RIGHT_HAND, [this, player, targetStorage](std::unique_ptr<Item> unequippedItem) {
+                    if (unequippedItem) {
+                        // 卸下成功，使用行动队列将物品存储到目标存储空间
+                        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "成功卸下手持物品: %s，通过行动队列放入目标存储空间", unequippedItem->getName().c_str());
+                        
+                        // 创建存储行为并添加到行动队列
+                        player->storeItemWithAction(std::move(unequippedItem), targetStorage);
+                        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "已将手持物品存储行为添加到行动队列");
+                        
+                        // 更新UI
+                        updatePlayerUI(player);
                     }
                     else {
-                        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "目标存储空间无法容纳手持物品: %s", itemName.c_str());
+                        // 卸下失败
+                        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持物品卸下失败");
                     }
-                }
+                });
             }
         }
         // 如果是普通物品转移（源存储空间存在且与目标存储空间不同）
@@ -1430,4 +1508,367 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     sourceStorage = nullptr;
 
     return true;
+}
+
+
+
+// 显示确认对话框
+void GameUI::showConfirmationDialog(const std::string& title, const std::string& message, 
+                                   const std::string& confirmText, const std::string& cancelText,
+                                   std::function<void(bool)> callback) {
+    if (!confirmationWindow) return;
+    
+    // 保存回调函数
+    confirmationCallback = callback;
+    
+    // 暂停游戏
+    if (Game::getInstance()) {
+        originalTimeScaleBeforeConfirmation = Game::getInstance()->getTimeScale();
+        Game::getInstance()->setTimeScale(0.0f);
+    }
+    
+    // 获取实际窗口尺寸
+    float screenWidth = 1920.0f; 
+    float screenHeight = 1080.0f;
+    if (Game::getInstance()) {
+        screenWidth = static_cast<float>(Game::getInstance()->getWindowWidth());
+        screenHeight = static_cast<float>(Game::getInstance()->getWindowHeight());
+    }
+    
+    // 设置确认框宽度为屏幕宽度的1/4
+    float confirmationWidth = screenWidth / 4.0f;
+    confirmationWindow->setMaxContentWidth(confirmationWidth - 50.0f); // 减去边距
+    
+    // 更新窗口内容
+    updateConfirmationDialog(title, message, confirmText, cancelText);
+    
+    // 手动调整大小并居中（确保正确的顺序）
+    confirmationWindow->autoSizeToContent();
+    confirmationWindow->centerOnScreen(screenWidth, screenHeight);
+    
+    // 显示窗口
+    isConfirmationVisible = true;
+    confirmationWindow->setVisible(true);
+}
+
+// 隐藏确认对话框
+void GameUI::hideConfirmationDialog() {
+    if (!confirmationWindow) return;
+    
+    isConfirmationVisible = false;
+    confirmationWindow->setVisible(false);
+    
+    // 恢复游戏倍率
+    if (Game::getInstance()) {
+        Game::getInstance()->setTimeScale(originalTimeScaleBeforeConfirmation);
+    }
+    
+    // 清理回调函数
+    confirmationCallback = nullptr;
+}
+
+// 更新确认对话框内容
+void GameUI::updateConfirmationDialog(const std::string& title, const std::string& message, 
+                                     const std::string& confirmText, const std::string& cancelText) {
+    if (!confirmationWindow) return;
+    
+    confirmationWindow->clearElements();
+    
+    // 添加标题
+    UIElement titleElement(title, 0.0f, 15.0f, {255, 255, 255, 255}, UIElementType::TITLE);
+    confirmationWindow->addElement(titleElement);
+    
+    // 添加消息文本（会自动换行）
+    UIElement messageElement(message, 0.0f, 25.0f, {220, 220, 220, 255}, UIElementType::TEXT);
+    confirmationWindow->addElement(messageElement);
+    
+    // 添加按钮间距
+    UIElement spacer("", 0.0f, 30.0f, {0, 0, 0, 0}, UIElementType::TEXT);
+    confirmationWindow->addElement(spacer);
+    
+    // 添加确认按钮 - 使用相对较近的位置让按钮在同一行
+    UIElement confirmButton(confirmText, 50.0f, 45.0f, {100, 255, 100, 255}, UIElementType::TEXT);
+    confirmButton.setDataPtr(reinterpret_cast<void*>(1)); // 使用非零值表示确认
+    confirmationWindow->addElement(confirmButton);
+    
+    // 添加取消按钮 - 确认按钮文本宽度大约为120像素，间距40像素
+    float cancelButtonX = 50.0f + 120.0f + 40.0f; // 确认按钮X + 预估宽度 + 间距
+    UIElement cancelButton(cancelText, cancelButtonX, 45.0f, {255, 100, 100, 255}, UIElementType::TEXT);
+    cancelButton.setDataPtr(nullptr); // 使用nullptr表示取消
+    confirmationWindow->addElement(cancelButton);
+}
+
+// 处理确认对话框的点击事件
+void GameUI::handleConfirmationClick(const UIElement& element) {
+    // 检查是否为存储选择确认框
+    if (pendingHeldItemToReplace) {
+        handleStorageSelectionConfirmationClick(element);
+        return;
+    }
+    
+    // 普通确认框处理
+    void* dataPtr = element.getDataPtr();
+    
+    // 根据dataPtr判断是确认还是取消
+    bool confirmed = (dataPtr != nullptr);
+    
+    // 调用回调函数
+    if (confirmationCallback) {
+        confirmationCallback(confirmed);
+    }
+    
+    // 隐藏对话框
+    hideConfirmationDialog();
+}
+
+// 显示存储选择确认框
+void GameUI::showStorageSelectionConfirmationDialog(Item* currentHeldItem, Item* newItem, Storage* newItemSource) {
+    if (!confirmationWindow || !currentPlayer || !currentHeldItem) return;
+    
+    // 保存待处理的物品信息
+    pendingHeldItemToReplace = currentHeldItem;
+    pendingNewItemToHold = newItem;
+    pendingNewItemSource = newItemSource;
+    
+    // 构建确认框内容
+    std::string title = "选择存储位置";
+    std::string message = "当前手持：" + currentHeldItem->getName();
+    
+    if (newItem) {
+        message += "\n新手持：" + newItem->getName();
+    }
+    
+    message += "\n\n请选择将当前手持物品放入哪个存储空间：\n";
+    
+    // 获取所有可用的存储空间
+    auto storagePairs = currentPlayer->getAllAvailableStorages();
+    
+    // 为每个可以容纳物品的存储空间添加选项
+    for (const auto& [slot, storage] : storagePairs) {
+        if (storage && storage->canFitItem(currentHeldItem)) {
+            // 计算存储时间
+            float storeTime = storage->getAccessTime();
+            float takeTime = newItemSource ? newItemSource->getAccessTime() : 0.0f;
+            float totalTime = storeTime + takeTime;
+            
+            message += "\n• " + storage->getName() + 
+                      " (" + std::to_string((int)(totalTime * 10) / 10.0f) + "秒)" +
+                      " [" + std::to_string(storage->getItemCount()) + "/" + 
+                      std::to_string(storage->getMaxItems()) + "]";
+        }
+    }
+    
+    // 更新确认框内容
+    updateStorageSelectionConfirmationDialog();
+    
+    // 暂停游戏并显示确认框
+    if (Game::getInstance()) {
+        originalTimeScaleBeforeConfirmation = Game::getInstance()->getTimeScale();
+        Game::getInstance()->setTimeScale(0.0f);
+    }
+    
+    // 获取实际窗口尺寸
+    float screenWidth = 1920.0f;
+    float screenHeight = 1080.0f;
+    if (Game::getInstance()) {
+        screenWidth = static_cast<float>(Game::getInstance()->getWindowWidth());
+        screenHeight = static_cast<float>(Game::getInstance()->getWindowHeight());
+    }
+    
+    // 设置确认框宽度为屏幕宽度的1/3（稍大一些以容纳存储选项）
+    float confirmationWidth = screenWidth / 3.0f;
+    confirmationWindow->setMaxContentWidth(confirmationWidth - 50.0f);
+    
+    // 调整大小并居中
+    confirmationWindow->autoSizeToContent();
+    confirmationWindow->centerOnScreen(screenWidth, screenHeight);
+    
+    // 显示窗口
+    isConfirmationVisible = true;
+    confirmationWindow->setVisible(true);
+}
+
+// 更新存储选择确认框内容
+void GameUI::updateStorageSelectionConfirmationDialog() {
+    if (!confirmationWindow || !currentPlayer || !pendingHeldItemToReplace) return;
+    
+    confirmationWindow->clearElements();
+    
+    // 添加标题
+    UIElement title("选择存储位置", 20.0f, 50.0f, {255, 255, 255, 255}, UIElementType::TITLE);
+    confirmationWindow->addElement(title);
+    
+    // 添加当前手持物品信息
+    std::string currentHeldText = "当前手持：" + pendingHeldItemToReplace->getName();
+    UIElement currentHeld(currentHeldText, 20.0f, 40.0f, {200, 200, 200, 255}, UIElementType::TEXT);
+    confirmationWindow->addElement(currentHeld);
+    
+    // 添加新手持物品信息（如果有）
+    if (pendingNewItemToHold) {
+        std::string newHeldText = "新手持：" + pendingNewItemToHold->getName();
+        UIElement newHeld(newHeldText, 20.0f, 35.0f, {200, 200, 200, 255}, UIElementType::TEXT);
+        confirmationWindow->addElement(newHeld);
+    }
+    
+    // 添加说明
+    UIElement instruction("请选择将当前手持物品放入哪个存储空间：", 20.0f, 40.0f, {255, 255, 0, 255}, UIElementType::TEXT);
+    confirmationWindow->addElement(instruction);
+    
+    // 添加间距
+    UIElement spacer1("", 0.0f, 20.0f, {0, 0, 0, 0}, UIElementType::TEXT);
+    confirmationWindow->addElement(spacer1);
+    
+    // 获取所有可用的存储空间
+    auto storagePairs = currentPlayer->getAllAvailableStorages();
+    
+    // 遍历所有存储空间，显示可以容纳当前手持物品的存储空间
+    for (const auto& [slot, storage] : storagePairs) {
+        if (storage && storage->canFitItem(pendingHeldItemToReplace)) {
+            // 计算存储时间
+            float storeTime = storage->getAccessTime();
+            float takeTime = pendingNewItemSource ? pendingNewItemSource->getAccessTime() : 0.0f;
+            float totalTime = storeTime + takeTime;
+            
+            // 创建存储选项文本
+            std::string optionText = storage->getName() + 
+                                   " (" + std::to_string((int)(totalTime * 10) / 10.0f) + "秒)" +
+                                   " [" + std::to_string(storage->getItemCount()) + "/" + 
+                                   std::to_string(storage->getMaxItems()) + "]";
+            
+            // 创建UI元素
+            UIElement storageOption(optionText, 40.0f, 35.0f, {100, 255, 100, 255}, UIElementType::TEXT);
+            storageOption.setDataPtr(storage); // 将存储空间指针绑定到元素
+            confirmationWindow->addElement(storageOption);
+        }
+    }
+    
+    // 添加取消按钮
+    UIElement spacer2("", 0.0f, 20.0f, {0, 0, 0, 0}, UIElementType::TEXT);
+    confirmationWindow->addElement(spacer2);
+    
+    UIElement cancelButton("取消", 40.0f, 35.0f, {255, 100, 100, 255}, UIElementType::TEXT);
+    cancelButton.setDataPtr(nullptr); // 取消按钮没有关联数据
+    confirmationWindow->addElement(cancelButton);
+}
+
+// 处理存储选择确认框的点击事件
+void GameUI::handleStorageSelectionConfirmationClick(const UIElement& element) {
+    if (!currentPlayer || !pendingHeldItemToReplace) return;
+    
+    void* dataPtr = element.getDataPtr();
+    
+    // 检查是否点击了取消按钮
+    if (element.getText() == "取消" || dataPtr == nullptr) {
+        hideConfirmationDialog();
+        // 清理待处理的物品信息
+        pendingHeldItemToReplace = nullptr;
+        pendingNewItemToHold = nullptr;
+        pendingNewItemSource = nullptr;
+        return;
+    }
+    
+    // 检查是否选择了存储空间
+    Storage* selectedStorage = static_cast<Storage*>(dataPtr);
+    if (selectedStorage && selectedStorage->canFitItem(pendingHeldItemToReplace)) {
+        // 创建行为序列：1. 放下当前手持物品，2. 拿起新物品
+        
+        // 先卸下当前手持物品到选定的存储空间
+        currentPlayer->unequipItem(EquipSlot::RIGHT_HAND, [this, selectedStorage](std::unique_ptr<Item> unequippedItem) {
+            if (unequippedItem) {
+                // 将卸下的物品放入选定的存储空间
+                bool addResult = selectedStorage->addItem(std::move(unequippedItem));
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "将手持物品放入存储空间: %s", addResult ? "成功" : "失败");
+                
+                // 更新UI
+                if (currentPlayer) {
+                    updatePlayerUI(currentPlayer);
+                }
+            }
+        });
+        
+        // 然后从源存储空间中取出新物品并手持
+        if (pendingNewItemToHold && pendingNewItemSource) {
+            currentPlayer->holdItemFromStorage(pendingNewItemToHold, pendingNewItemSource);
+        }
+        
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "装备替换序列已添加到行为队列");
+        
+        // 隐藏确认框
+        hideConfirmationDialog();
+        
+        // 清理待处理的物品信息
+        pendingHeldItemToReplace = nullptr;
+        pendingNewItemToHold = nullptr;
+        pendingNewItemSource = nullptr;
+    }
+}
+
+// 测试存储选择确认框
+void GameUI::testStorageSelectionDialog() {
+    if (!currentPlayer) return;
+    
+    // 创建测试物品
+    auto testCurrentItem = std::make_unique<Item>("测试当前手持物品", 1.0f, 1.0f, 1.0f, 100.0f);
+    auto testNewItem = std::make_unique<Item>("测试新物品", 1.5f, 1.2f, 1.1f, 150.0f);
+    
+    // 获取第一个可用的存储空间作为源
+    auto storagePairs = currentPlayer->getAllAvailableStorages();
+    Storage* testSource = nullptr;
+    if (!storagePairs.empty()) {
+        testSource = storagePairs.begin()->second;
+    }
+    
+    // 显示存储选择确认框
+    showStorageSelectionConfirmationDialog(testCurrentItem.get(), testNewItem.get(), testSource);
+    
+    // 注意：这里我们不释放物品指针，因为它们只是用于测试显示
+    testCurrentItem.release();
+    testNewItem.release();
+}
+
+void GameUI::updateHandSlotRect() {
+    // 重置手持位坐标有效性
+    handSlotRectValid = false;
+    
+    // 检查玩家窗口是否存在
+    if (!playerWindow || !currentPlayer) {
+        return;
+    }
+    
+    // 获取所有UI元素
+    const auto& elements = playerWindow->getElements();
+    
+    // 精确定位手持物品element
+    // 布局顺序：
+    // 0: title ("玩家背包")
+    // 1: handSlotTitle ("手持物品")  
+    // 2: heldItem/emptyHandElement (<空> 或实际手持物品)
+    // 3: spacer1
+    // 4: equipTitle...
+    
+    int handSlotElementIndex = 2; // 手持物品element固定在索引2
+    
+    // 验证索引有效性和element内容
+    if (handSlotElementIndex < static_cast<int>(elements.size())) {
+        const auto& element = elements[handSlotElementIndex];
+        const std::string& text = element.getText();
+        
+        // 验证这确实是手持位element（显示<空>或有手持物品数据）
+        bool isHandSlotElement = (text == "<空>" || 
+                                 (element.getDataPtr() != nullptr && 
+                                  currentPlayer->getHeldItem() == static_cast<Item*>(element.getDataPtr())));
+        
+        if (isHandSlotElement) {
+            // 获取element的渲染区域
+            if (playerWindow->getElementRect(handSlotElementIndex, handSlotRect)) {
+                handSlotRectValid = true;
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位区域更新: (%.1f,%.1f,%.1f,%.1f), 内容='%s'", 
+                           handSlotRect.x, handSlotRect.y, handSlotRect.width, handSlotRect.height, text.c_str());
+            }
+                 } else {
+             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "索引2的element不是手持位element: '%s'", text.c_str());
+         }
+     } else {
+         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "UI元素数量不足，无法找到手持位element");
+     }
 }

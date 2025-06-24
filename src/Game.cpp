@@ -13,7 +13,6 @@
 #include "GunMod.h"   // 添加 GunMod.h
 #include "SoundManager.h" // <--- 添加这一行
 #include "ItemLoader.h" // 添加 ItemLoader.h
-#include "Machete.h"    // 添加 Machete.h
 #include <SDL3/SDL_mouse.h>
 #include <iostream>
 #include <cmath>
@@ -299,13 +298,17 @@ bool Game::init() {
 
             // --- 为玩家生成一把砍刀 ---
             if (player) {
-                // 直接创建Machete对象（确保实现了IWeaponAttack接口）
-                auto machete = std::make_unique<Machete>();
-                machete->setRarity(ItemRarity::COMMON);
-                
-                // 将砍刀装备到玩家手上
-                player->equipItem(std::move(machete));
-                std::cout << "Player equipped with Machete (direct creation)." << std::endl;
+                // 使用通用的MeleeWeapon类，通过JSON配置驱动
+                auto meleeWeapon = ItemLoader::getInstance()->createMeleeWeapon("军用砍刀");
+                if (meleeWeapon) {
+                    meleeWeapon->setRarity(ItemRarity::COMMON);
+                    
+                    // 将砍刀装备到玩家手上
+                    player->equipItem(std::move(meleeWeapon));
+                    std::cout << "Player equipped with MeleeWeapon: 军用砍刀 (data-driven creation)." << std::endl;
+                } else {
+                    std::cout << "Failed to create MeleeWeapon: 军用砍刀" << std::endl;
+                }
             }
             
             /*
@@ -596,6 +599,16 @@ void Game::handleEvents() {
                 break;
             case SDLK_F3: // F3键切换调试模式
                 toggleDebugMode();
+                break;
+            case SDLK_F4: // F4键测试确认框
+                if (gameUI) {
+                    gameUI->testConfirmationDialog();
+                }
+                break;
+            case SDLK_F5: // F5键测试存储选择确认框
+                if (gameUI) {
+                    gameUI->testStorageSelectionDialog();
+                }
                 break;
             case SDLK_TAB: // Tab键切换背包界面
                 togglePlayerUI();

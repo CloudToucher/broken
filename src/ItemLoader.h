@@ -13,6 +13,7 @@
 #include "Magazine.h"
 #include "Ammo.h"
 #include "Weapon.h"
+#include "MeleeWeapon.h"
 
 
 // 使用nlohmann/json库的命名空间
@@ -61,6 +62,7 @@ public:
     std::unique_ptr<Magazine> createMagazine(const std::string& magazineName);
     std::unique_ptr<Ammo> createAmmo(const std::string& ammoName);
     std::unique_ptr<Weapon> createWeapon(const std::string& weaponName);
+    std::unique_ptr<MeleeWeapon> createMeleeWeapon(const std::string& weaponName);
     
     // 检查是否存在指定名称的物品模板
     bool hasItemTemplate(const std::string& itemName) const;
@@ -89,11 +91,17 @@ private:
     // 从JSON对象加载武器
     std::unique_ptr<Weapon> loadWeaponFromJson(const json& weaponJson);
     
+    // 从JSON对象加载近战武器
+    std::unique_ptr<MeleeWeapon> loadMeleeWeaponFromJson(const json& weaponJson);
+    
     // 辅助方法：从JSON加载物品标签
     void loadItemFlags(Item* item, const json& flagsJson);
     
     // 辅助方法：从JSON加载装备槽位
     void loadEquipSlots(Item* item, const json& slotsJson);
+    
+    // 辅助方法：从JSON加载攻击模式配置
+    void loadAttackModes(MeleeWeapon* weapon, const json& attackModesJson);
     
     // 辅助方法：解析攻击方式
     AttackMethod parseAttackMethod(const std::string& methodStr);

@@ -10,7 +10,7 @@
 #include "EntityStateEffect.h" // 包含EntityStateEffect.h
 #include "storage.h" // 包含EntityStateEffect.h
 #include "AttackSystem.h" // 包含攻击系统头文件
-#include "Machete.h" // 包含砍刀头文件
+#include "MeleeWeapon.h" // 包含通用近战武器头文件
 
 
 // 在构造函数中初始化新增变量
@@ -56,9 +56,9 @@ Player::Player(float startX, float startY)
             
             // 显示连击信息
             if (heldItem && heldItem->hasFlag(ItemFlag::MELEE)) {
-                Machete* machete = dynamic_cast<Machete*>(heldItem.get());
-                if (machete && machete->getComboCount() > 0) {
-                    std::cout << " [" << machete->getComboCount() << "连击!]";
+                MeleeWeapon* meleeWeapon = dynamic_cast<MeleeWeapon*>(heldItem.get());
+                if (meleeWeapon && meleeWeapon->getComboCount() > 0) {
+                    std::cout << " [" << meleeWeapon->getComboCount() << "连击!]";
                 }
             }
             
@@ -152,9 +152,9 @@ void Player::update(float deltaTime) {
         // 如果是近战武器，更新其冷却时间
         IWeaponAttack* weaponAttack = dynamic_cast<IWeaponAttack*>(heldItem.get());
         if (weaponAttack) {
-            Machete* machete = dynamic_cast<Machete*>(heldItem.get());
-            if (machete) {
-                machete->updateCooldown(static_cast<int>(deltaTime * 1000));
+            MeleeWeapon* meleeWeapon = dynamic_cast<MeleeWeapon*>(heldItem.get());
+            if (meleeWeapon) {
+                meleeWeapon->updateCooldown(static_cast<int>(deltaTime * 1000));
             }
         }
     }
@@ -209,19 +209,19 @@ void Player::equipItem(std::unique_ptr<Item> item) {
         return;
     }
 
-    // 如果是武器或工具类物品，设置为手持物品（右手）
-    if (item->hasFlag(ItemFlag::WEAPON) || item->hasFlag(ItemFlag::MISC)) {
-        // 将物品设置为手持物品（右手）
-        heldItem = std::move(item);
-        if (heldItem) {
-            std::cout << "Player equipped in right hand: " << heldItem->getName() << std::endl;
-        }
-    } else if (item->isWearable()) {
+    // 如果是可穿戴物品，使用Action系统进行装备
+    if (item->isWearable()) {
         // 如果是可穿戴物品（如背包、护甲等），使用Action系统进行装备
         // 这样可以确保有正确的装备动画和时间
         std::string itemName = item->getName(); // 保存物品名称用于日志
         equipItemWithAction(std::move(item));
         std::cout << "Player started equipping wearable item: " << itemName << std::endl;
+    } else {
+        // 对于其他所有物品（武器、工具、弹药等），都设置为手持物品（右手）
+        heldItem = std::move(item);
+        if (heldItem) {
+            std::cout << "Player equipped in right hand: " << heldItem->getName() << std::endl;
+        }
     }
 }
 

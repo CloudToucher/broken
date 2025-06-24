@@ -19,6 +19,20 @@ struct ElementRenderRect {
     float height;
 };
 
+// 文本换行结果结构体
+struct WrappedTextLine {
+    std::string text;
+    float width;
+    float height;
+};
+
+// 布局计算结果结构体
+struct LayoutCalculationResult {
+    float totalWidth;
+    float totalHeight;
+    std::vector<std::vector<WrappedTextLine>> elementLines; // 每个元素的换行结果
+};
+
 class UIWindow {
 private:
     bool isVisible;
@@ -43,6 +57,16 @@ private:
     TTF_Font* titleFont;      // 标题字体
     TTF_Font* subtitleFont;   // 副标题字体
     TTF_Font* normalFont;     // 普通文本字体
+    
+    // 自动布局相关参数
+    float maxContentWidth;    // 最大内容宽度（用于换行计算）
+    float padding;            // 内边距
+    bool autoResize;          // 是否自动调整窗口大小
+    
+    // 文本换行相关方法
+    std::vector<WrappedTextLine> wrapText(const std::string& text, TTF_Font* font, float maxWidth) const;
+    float calculateTextWidth(const std::string& text, TTF_Font* font) const;
+    float calculateTextHeight(TTF_Font* font) const;
 
 public:
     UIWindow(float x, float y, float width, float height, SDL_Color borderColor = {255, 255, 255, 255}, Uint8 opacity = 180);
@@ -68,6 +92,19 @@ public:
     void setWidth(float w)  { this->width=w; }
     void setHeight(float h)  { this->height=h; }
     
+    // 自动布局相关方法
+    void setMaxContentWidth(float maxWidth) { this->maxContentWidth = maxWidth; }
+    float getMaxContentWidth() const { return maxContentWidth; }
+    void setPadding(float padding) { this->padding = padding; }
+    float getPadding() const { return padding; }
+    void setAutoResize(bool autoResize) { this->autoResize = autoResize; }
+    bool getAutoResize() const { return autoResize; }
+    
+    // 布局计算方法
+    LayoutCalculationResult calculateLayout() const;
+    void autoSizeToContent();
+    void centerOnScreen(float screenWidth, float screenHeight);
+    
     // 元素管理
     void addElement(const UIElement& element);
     void clearElements();
@@ -88,6 +125,7 @@ public:
     // 更新和渲染
     void update();
     void render(SDL_Renderer* renderer, float windowWidth, float windowHeight);
+    void renderWithWrapping(SDL_Renderer* renderer, float windowWidth, float windowHeight);
     
     // 调试功能：绘制元素边框
     void renderElementBorders(SDL_Renderer* renderer, SDL_Color borderColor = {255, 0, 0, 255});

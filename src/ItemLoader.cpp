@@ -1,5 +1,6 @@
 #include "ItemLoader.h"
 #include "Storage.h"
+#include "MeleeWeapon.h"
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -126,13 +127,26 @@ bool ItemLoader::loadItemsFromJson(const json& jsonData) {
         // 加载武器
         if (jsonData.contains("weapons") && jsonData["weapons"].is_array()) {
             for (const auto& weaponJson : jsonData["weapons"]) {
-                auto weapon = loadWeaponFromJson(weaponJson);
-                if (weapon) {
-                    std::string name = weapon->getName();
-                    // 先存储在weaponTemplates中
-                    weaponTemplates[name] = std::move(weapon);
-                    // 然后创建一个副本用于itemTemplates
-                    itemTemplates[name] = std::unique_ptr<Item>(weaponTemplates[name]->clone());
+                // 检查武器类型，决定创建哪种武器对象
+                if (weaponJson.contains("weaponType") && weaponJson["weaponType"] == "MELEE") {
+                    // 创建近战武器
+                    auto meleeWeapon = loadMeleeWeaponFromJson(weaponJson);
+                    if (meleeWeapon) {
+                        std::string name = meleeWeapon->getName();
+                        // 存储为通用武器模板
+                        itemTemplates[name] = std::unique_ptr<Item>(meleeWeapon->clone());
+                        std::cout << "加载近战武器: " << name << std::endl;
+                    }
+                } else {
+                    // 创建普通武器（远程、投掷等）
+                    auto weapon = loadWeaponFromJson(weaponJson);
+                    if (weapon) {
+                        std::string name = weapon->getName();
+                        // 先存储在weaponTemplates中
+                        weaponTemplates[name] = std::move(weapon);
+                        // 然后创建一个副本用于itemTemplates
+                        itemTemplates[name] = std::unique_ptr<Item>(weaponTemplates[name]->clone());
+                    }
                 }
             }
         }
@@ -927,6 +941,13 @@ void ItemLoader::loadItemFlags(Item* item, const json& flagsJson) {
         {"THROWABLE", ItemFlag::THROWABLE},
         {"GUNMOD", ItemFlag::GUNMOD},
         
+        // 近战武器子类型标签
+        {"SWORD", ItemFlag::SWORD},
+        {"AXE", ItemFlag::AXE},
+        {"HAMMER", ItemFlag::HAMMER},
+        {"SPEAR", ItemFlag::SPEAR},
+        {"DAGGER", ItemFlag::DAGGER},
+        
         // 枪械类型标签
         {"PISTOL", ItemFlag::PISTOL},
         {"REVOLVER", ItemFlag::REVOLVER},
@@ -1133,6 +1154,85 @@ std::unique_ptr<Weapon> ItemLoader::loadWeaponFromJson(const json& weaponJson) {
     }
 }
 
+// 从JSON对象加载近战武器
+std::unique_ptr<MeleeWeapon> ItemLoader::loadMeleeWeaponFromJson(const json& weaponJson) {
+    try {
+        // 检查必要字段
+        if (!weaponJson.contains("name") || !weaponJson["name"].is_string()) {
+            std::cerr << "近战武器JSON缺少有效的name字段" << std::endl;
+            return nullptr;
+        }
+        
+        // 获取基本属性
+        std::string name = weaponJson["name"];
+        
+        // 创建近战武器
+        auto meleeWeapon = std::make_unique<MeleeWeapon>(name);
+        
+        // 设置基本Item属性
+        if (weaponJson.contains("weight")) meleeWeapon->setWeight(weaponJson["weight"]);
+        if (weaponJson.contains("volume")) meleeWeapon->setVolume(weaponJson["volume"]);
+        if (weaponJson.contains("length")) meleeWeapon->setLength(weaponJson["length"]);
+        if (weaponJson.contains("value")) meleeWeapon->setValue(weaponJson["value"]);
+        if (weaponJson.contains("description")) meleeWeapon->setDescription(weaponJson["description"]);
+        
+        // 设置伤害属性（用于MeleeWeapon的getWeaponDamage等方法）
+        if (weaponJson.contains("damage")) {
+            // 根据武器类型设置对应的伤害属性
+            float damage = weaponJson["damage"];
+            
+            // 默认设置斩击伤害，具体类型将由flag控制
+            meleeWeapon->setSlashingDamage(static_cast<int>(damage));
+        }
+        
+        // 设置攻击时间（用于速度计算）
+        if (weaponJson.contains("attackSpeed")) {
+            float attackSpeed = weaponJson["attackSpeed"];
+            meleeWeapon->setAttackTime(1.0f / attackSpeed); // 转换为秒
+        }
+        
+        // 武器只有在手持时才发挥作用，不设置默认装备槽位
+        
+        // 设置装备槽位
+        if (weaponJson.contains("equipSlots") && weaponJson["equipSlots"].is_array()) {
+            loadEquipSlots(meleeWeapon.get(), weaponJson["equipSlots"]);
+        }
+        
+        // 加载标签（这是关键，决定武器类型和特效）
+        if (weaponJson.contains("flags") && weaponJson["flags"].is_array()) {
+            loadItemFlags(meleeWeapon.get(), weaponJson["flags"]);
+        }
+        
+        // 加载攻击模式配置
+        if (weaponJson.contains("attackModes") && weaponJson["attackModes"].is_object()) {
+            loadAttackModes(meleeWeapon.get(), weaponJson["attackModes"]);
+        }
+        
+        return meleeWeapon;
+    } catch (const std::exception& e) {
+        std::cerr << "加载近战武器时出错: " << e.what() << std::endl;
+        return nullptr;
+    }
+}
+
+// 创建近战武器实例
+std::unique_ptr<MeleeWeapon> ItemLoader::createMeleeWeapon(const std::string& weaponName) {
+    if (!hasItemTemplate(weaponName)) {
+        std::cerr << "未找到近战武器模板: " << weaponName << std::endl;
+        return nullptr;
+    }
+    
+    // 检查模板是否为MeleeWeapon类型
+    const MeleeWeapon* templateWeapon = dynamic_cast<const MeleeWeapon*>(itemTemplates[weaponName].get());
+    if (!templateWeapon) {
+        std::cerr << "物品不是近战武器类型: " << weaponName << std::endl;
+        return nullptr;
+    }
+    
+    // 创建新的近战武器（深拷贝）
+    return std::unique_ptr<MeleeWeapon>(dynamic_cast<MeleeWeapon*>(templateWeapon->clone()));
+}
+
 // 创建武器实例
 std::unique_ptr<Weapon> ItemLoader::createWeapon(const std::string& weaponName) {
     if (!hasWeaponTemplate(weaponName)) {
@@ -1188,4 +1288,64 @@ SpecialEffect ItemLoader::loadSpecialEffectFromJson(const json& effectJson) {
     }
     
     return effect;
+}
+
+// 从JSON加载攻击模式配置
+void ItemLoader::loadAttackModes(MeleeWeapon* weapon, const json& attackModesJson) {
+    try {
+        for (const auto& [modeKey, modeJson] : attackModesJson.items()) {
+            AttackModeConfig config;
+            
+            // 加载基础参数
+            if (modeJson.contains("shape") && modeJson["shape"].is_string()) {
+                config.shape = modeJson["shape"];
+            }
+            
+            if (modeJson.contains("angle") && modeJson["angle"].is_number()) {
+                config.angle = modeJson["angle"];
+            }
+            
+            if (modeJson.contains("range") && modeJson["range"].is_number()) {
+                config.range = modeJson["range"];
+            }
+            
+            if (modeJson.contains("width") && modeJson["width"].is_number()) {
+                config.width = modeJson["width"];
+            }
+            
+            if (modeJson.contains("damageMultiplier") && modeJson["damageMultiplier"].is_number()) {
+                config.damageMultiplier = modeJson["damageMultiplier"];
+            }
+            
+            // 加载特殊效果
+            if (modeJson.contains("effects") && modeJson["effects"].is_array()) {
+                for (const auto& effectJson : modeJson["effects"]) {
+                    AttackEffectConfig effectConfig;
+                    
+                    if (effectJson.contains("type") && effectJson["type"].is_string()) {
+                        effectConfig.type = effectJson["type"];
+                    }
+                    
+                    if (effectJson.contains("chance") && effectJson["chance"].is_number()) {
+                        effectConfig.chance = effectJson["chance"];
+                    }
+                    
+                    if (effectJson.contains("duration") && effectJson["duration"].is_number()) {
+                        effectConfig.duration = effectJson["duration"];
+                    }
+                    
+                    if (effectJson.contains("magnitude") && effectJson["magnitude"].is_number()) {
+                        effectConfig.magnitude = effectJson["magnitude"];
+                    }
+                    
+                    config.effects.push_back(effectConfig);
+                }
+            }
+            
+            // 设置攻击模式
+            weapon->setAttackMode(modeKey, config);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "加载攻击模式配置时出错: " << e.what() << std::endl;
+    }
 }

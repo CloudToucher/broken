@@ -441,6 +441,7 @@ Entity* AttackSystem::findTargetInShape(const AttackParams& params) const {
                 inRange = isTargetInCircle(zombie.get(), params.range);
                 break;
             case AttackShape::SECTOR:
+            case AttackShape::LARGE_SECTOR:
                 inRange = isTargetInSector(zombie.get(), params);
                 break;
             case AttackShape::RECTANGLE:

@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <iostream>
 #include "UIWindow.h"
 
 class Game;
@@ -56,6 +57,21 @@ private:
     // 存储空间坐标映射
     std::vector<StorageCoordinates> storageCoordinatesMap; // 存储空间坐标范围映射
     
+    // 手持位坐标（动态计算）
+    ElementRenderRect handSlotRect; // 手持位元素的渲染区域
+    bool handSlotRectValid; // 手持位坐标是否有效
+    
+    // 待处理的物品信息（用于存储选择确认框）
+    Item* pendingHeldItemToReplace;                    // 待替换的手持物品
+    Item* pendingNewItemToHold;                        // 待手持的新物品
+    Storage* pendingNewItemSource;                     // 新物品的源存储空间
+    
+    // 确认对话框相关
+    std::unique_ptr<UIWindow> confirmationWindow;      // 确认对话框窗口
+    bool isConfirmationVisible;                        // 确认对话框是否可见
+    std::function<void(bool)> confirmationCallback;    // 确认对话框回调函数
+    float originalTimeScaleBeforeConfirmation;         // 确认对话框显示前的游戏倍率
+    
     // 处理元素点击事件
     void onElementClick(const UIElement& element);
     
@@ -70,6 +86,23 @@ private:
     
     // 更新存储空间坐标映射
     void updateStorageCoordinatesMap();
+    
+    // 更新手持位坐标
+    void updateHandSlotRect();
+    
+    // 确认对话框相关方法
+    void showConfirmationDialog(const std::string& title, const std::string& message, 
+                               const std::string& confirmText = "确认", const std::string& cancelText = "取消",
+                               std::function<void(bool)> callback = nullptr);
+    void hideConfirmationDialog();
+    void updateConfirmationDialog(const std::string& title, const std::string& message, 
+                                 const std::string& confirmText, const std::string& cancelText);
+    void handleConfirmationClick(const UIElement& element);
+    
+    // 存储选择确认框方法
+    void showStorageSelectionConfirmationDialog(Item* currentHeldItem, Item* newItem, Storage* newItemSource);
+    void updateStorageSelectionConfirmationDialog();
+    void handleStorageSelectionConfirmationClick(const UIElement& element);
     
 public:
     GameUI();
@@ -109,10 +142,30 @@ public:
     
     // 检查UI是否可见
     bool isPlayerUIOpen() const { return isUIVisible; }
-    bool isAnyUIOpen() const { return isUIVisible; }
+    bool isAnyUIOpen() const { return isUIVisible || isConfirmationVisible; }
     
     // 根据坐标查找对应元素所属的Storage
     Storage* findStorageByCoordinates(int x, int y);
+    
+    // 测试方法（可以通过按键触发）
+    void testConfirmationDialog() {
+        showConfirmationDialog(
+            "确认框测试", 
+            "这是测试消息，检查是否正确居中显示并设置为四分之一屏幕宽度。",
+            "确定", 
+            "取消",
+            [](bool confirmed) {
+                if (confirmed) {
+                    std::cout << "用户点击了确定按钮" << std::endl;
+                } else {
+                    std::cout << "用户点击了取消按钮" << std::endl;
+                }
+            }
+        );
+    }
+
+    // 测试存储选择确认框
+    void testStorageSelectionDialog();
 
 };
 
