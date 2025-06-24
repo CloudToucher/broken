@@ -21,6 +21,11 @@
 #include <chrono>
 #include <algorithm>
 
+// 数学常量
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // Game 类实现
 Game* Game::instance = nullptr;
 
@@ -45,6 +50,7 @@ Game::Game() :
     fps(0),
     fpsLastTime(0),
     deltaTime(0.0f),
+    animationTime(0.0f),
     zoomLevel(1.0f),
     MIN_ZOOM(0.25f),
     MAX_ZOOM(4.0f),
@@ -293,16 +299,13 @@ bool Game::init() {
 
             // --- 为玩家生成一把砍刀 ---
             if (player) {
-                // 使用ItemLoader创建一把砍刀
-                auto weapon = ItemLoader::getInstance()->createWeapon("军用砍刀");
-                if (weapon) {
-                    // 设置武器的稀有度
-                    weapon->setRarity(ItemRarity::COMMON);
-                    
-                    // 将武器装备到玩家手上
-                    player->equipItem(std::move(weapon));
-                    std::cout << "Player equipped with 军用砍刀." << std::endl;
-                }
+                // 直接创建Machete对象（确保实现了IWeaponAttack接口）
+                auto machete = std::make_unique<Machete>();
+                machete->setRarity(ItemRarity::COMMON);
+                
+                // 将砍刀装备到玩家手上
+                player->equipItem(std::move(machete));
+                std::cout << "Player equipped with Machete (direct creation)." << std::endl;
             }
             
             /*
@@ -733,6 +736,12 @@ void Game::update() {
     // 更新玩家
     if (player) {
         player->update(adjustedDeltaTime);
+        
+        // 更新动画时间
+        animationTime += adjustedDeltaTime * 2.0f; // 2倍速度让动画更活跃
+        if (animationTime > 2 * M_PI) {
+            animationTime -= 2 * M_PI; // 保持在0-2π范围内
+        }
     }
     
     // 更新丧尸
@@ -1869,18 +1878,17 @@ void Game::renderAttackRange() {
     
     // 获取玩家的攻击系统
     if (auto* attackSystem = player->getAttackSystem()) {
-        // 设置半透明渲染
+        // 设置混合模式
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         
-        // 渲染主攻击范围（扇形，绿色）
-        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 100);
-        attackSystem->renderAttackRange(renderer, primaryParams, cameraX, cameraY);
+        // 渲染动画攻击范围（使用白色渐变效果）
+        // 主攻击范围（左键扇形）
+        attackSystem->renderAnimatedAttackRange(renderer, primaryParams, cameraX, cameraY, animationTime);
         
-        // 渲染副攻击范围（长条形，蓝色）
-        SDL_SetRenderDrawColor(renderer, 0, 100, 255, 100);
-        attackSystem->renderAttackRange(renderer, secondaryParams, cameraX, cameraY);
+        // 副攻击范围（右键长条形）- 稍微不同的动画相位
+        attackSystem->renderAnimatedAttackRange(renderer, secondaryParams, cameraX, cameraY, animationTime + M_PI / 3);
         
-        // 恢复默认渲染模式
+        // 恢复默认混合模式
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }
 }

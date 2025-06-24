@@ -135,6 +135,9 @@ public:
     
     // 渲染攻击范围
     void renderAttackRange(SDL_Renderer* renderer, const AttackParams& params, float cameraX, float cameraY) const;
+    
+    // 渲染动画攻击范围（新增）
+    void renderAnimatedAttackRange(SDL_Renderer* renderer, const AttackParams& params, float cameraX, float cameraY, float animationPhase = 0.0f) const;
 
 private:
     // 内部方法
@@ -168,6 +171,12 @@ private:
     void renderSectorRange(SDL_Renderer* renderer, float x, float y, const AttackParams& params) const;
     void renderRectangleRange(SDL_Renderer* renderer, float x, float y, const AttackParams& params) const;
     void renderLineRange(SDL_Renderer* renderer, float x, float y, const AttackParams& params) const;
+    
+    // 动画渲染辅助方法（新增）
+    void renderAnimatedSectorRange(SDL_Renderer* renderer, float x, float y, const AttackParams& params, float animationPhase) const;
+    void renderAnimatedRectangleRange(SDL_Renderer* renderer, float x, float y, const AttackParams& params, float animationPhase) const;
+    void drawGradientLine(SDL_Renderer* renderer, int x1, int y1, int x2, int y2, Uint8 alpha1, Uint8 alpha2) const;
+    void fillGradientSector(SDL_Renderer* renderer, float cx, float cy, float radius, float startAngle, float endAngle, float animationPhase) const;
 };
 
 // 武器攻击接口 - 所有武器都可以实现这个接口

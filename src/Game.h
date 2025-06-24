@@ -214,6 +214,9 @@ public:
     // 渲染攻击范围
     void renderAttackRange();
     
+    // 动画时间跟踪（新增）
+    float animationTime;
+    
     // 生成测试地形来验证寻路系统
     void generateTestTerrain();
 };

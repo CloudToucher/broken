@@ -661,4 +661,190 @@ void AttackSystem::renderLineRange(SDL_Renderer* renderer, float x, float y, con
     int endY = static_cast<int>(y + params.range * std::sin(params.direction));
     
     SDL_RenderLine(renderer, static_cast<int>(x), static_cast<int>(y), endX, endY);
+}
+
+// 渲染动画攻击范围
+void AttackSystem::renderAnimatedAttackRange(SDL_Renderer* renderer, const AttackParams& params, float cameraX, float cameraY, float animationPhase) const {
+    if (!owner || !renderer) return;
+    
+    // 设置混合模式
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    
+    float ownerX = owner->getX() - cameraX;
+    float ownerY = owner->getY() - cameraY;
+    
+    switch (params.shape) {
+        case AttackShape::SECTOR:
+            renderAnimatedSectorRange(renderer, ownerX, ownerY, params, animationPhase);
+            break;
+        case AttackShape::RECTANGLE:
+            renderAnimatedRectangleRange(renderer, ownerX, ownerY, params, animationPhase);
+            break;
+        case AttackShape::CIRCLE:
+            renderCircleRange(renderer, ownerX, ownerY, params.range);
+            break;
+        case AttackShape::LINE:
+            renderLineRange(renderer, ownerX, ownerY, params);
+            break;
+    }
+    
+    // 恢复默认混合模式
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+// 渲染动画扇形攻击范围
+void AttackSystem::renderAnimatedSectorRange(SDL_Renderer* renderer, float x, float y, const AttackParams& params, float animationPhase) const {
+    float startAngle = params.direction - params.angle / 2.0f;
+    float endAngle = params.direction + params.angle / 2.0f;
+    
+    // 填充渐变扇形
+    fillGradientSector(renderer, x, y, params.range, startAngle, endAngle, animationPhase);
+    
+    // 绘制扇形边框（更亮的白色）
+    int segments = 32;
+    Uint8 borderAlpha = static_cast<Uint8>(180 + 50 * std::sin(animationPhase * 2 * M_PI));
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, borderAlpha);
+    
+    // 画弧线
+    for (int i = 0; i < segments; i++) {
+        float angle1 = startAngle + (endAngle - startAngle) * i / segments;
+        float angle2 = startAngle + (endAngle - startAngle) * (i + 1) / segments;
+        
+        int x1 = static_cast<int>(x + params.range * std::cos(angle1));
+        int y1 = static_cast<int>(y + params.range * std::sin(angle1));
+        int x2 = static_cast<int>(x + params.range * std::cos(angle2));
+        int y2 = static_cast<int>(y + params.range * std::sin(angle2));
+        
+        SDL_RenderLine(renderer, x1, y1, x2, y2);
+    }
+    
+    // 画扇形的两条边
+    int startX = static_cast<int>(x + params.range * std::cos(startAngle));
+    int startY = static_cast<int>(y + params.range * std::sin(startAngle));
+    int endX = static_cast<int>(x + params.range * std::cos(endAngle));
+    int endY = static_cast<int>(y + params.range * std::sin(endAngle));
+    
+    drawGradientLine(renderer, static_cast<int>(x), static_cast<int>(y), startX, startY, borderAlpha, borderAlpha / 3);
+    drawGradientLine(renderer, static_cast<int>(x), static_cast<int>(y), endX, endY, borderAlpha, borderAlpha / 3);
+}
+
+// 渲染动画长条形攻击范围
+void AttackSystem::renderAnimatedRectangleRange(SDL_Renderer* renderer, float x, float y, const AttackParams& params, float animationPhase) const {
+    float cos_dir = std::cos(params.direction);
+    float sin_dir = std::sin(params.direction);
+    float half_width = params.width / 2.0f;
+    
+    // 计算长条形的四个角点
+    float front_x = x + params.range * cos_dir;
+    float front_y = y + params.range * sin_dir;
+    
+    int x1 = static_cast<int>(x - half_width * sin_dir);
+    int y1 = static_cast<int>(y + half_width * cos_dir);
+    int x2 = static_cast<int>(x + half_width * sin_dir);
+    int y2 = static_cast<int>(y - half_width * cos_dir);
+    int x3 = static_cast<int>(front_x + half_width * sin_dir);
+    int y3 = static_cast<int>(front_y - half_width * cos_dir);
+    int x4 = static_cast<int>(front_x - half_width * sin_dir);
+    int y4 = static_cast<int>(front_y + half_width * cos_dir);
+    
+    // 渐变填充长条形
+    int segments = static_cast<int>(params.range / 8); // 分段数根据范围调整
+    for (int i = 0; i < segments; i++) {
+        float progress = static_cast<float>(i) / segments;
+        float nextProgress = static_cast<float>(i + 1) / segments;
+        
+        // 计算当前段的透明度（从中心向外渐变）
+        float centerAlpha = 120 + 60 * std::sin(animationPhase * 3 * M_PI);
+        float alpha1 = centerAlpha * (1.0f - progress * 0.8f);
+        float alpha2 = centerAlpha * (1.0f - nextProgress * 0.8f);
+        
+        // 计算当前段的坐标
+        float seg_x1 = x + progress * params.range * cos_dir;
+        float seg_y1 = y + progress * params.range * sin_dir;
+        float seg_x2 = x + nextProgress * params.range * cos_dir;
+        float seg_y2 = y + nextProgress * params.range * sin_dir;
+        
+        int sx1 = static_cast<int>(seg_x1 - half_width * sin_dir);
+        int sy1 = static_cast<int>(seg_y1 + half_width * cos_dir);
+        int sx2 = static_cast<int>(seg_x1 + half_width * sin_dir);
+        int sy2 = static_cast<int>(seg_y1 - half_width * cos_dir);
+        int sx3 = static_cast<int>(seg_x2 + half_width * sin_dir);
+        int sy3 = static_cast<int>(seg_y2 - half_width * cos_dir);
+        int sx4 = static_cast<int>(seg_x2 - half_width * sin_dir);
+        int sy4 = static_cast<int>(seg_y2 + half_width * cos_dir);
+        
+        // 绘制段
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, static_cast<Uint8>(alpha1));
+        drawGradientLine(renderer, sx1, sy1, sx2, sy2, static_cast<Uint8>(alpha1), static_cast<Uint8>(alpha1));
+        drawGradientLine(renderer, sx2, sy2, sx3, sy3, static_cast<Uint8>(alpha1), static_cast<Uint8>(alpha2));
+        drawGradientLine(renderer, sx3, sy3, sx4, sy4, static_cast<Uint8>(alpha2), static_cast<Uint8>(alpha2));
+        drawGradientLine(renderer, sx4, sy4, sx1, sy1, static_cast<Uint8>(alpha2), static_cast<Uint8>(alpha1));
+    }
+    
+    // 绘制边框
+    Uint8 borderAlpha = static_cast<Uint8>(200 + 55 * std::sin(animationPhase * 2 * M_PI));
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, borderAlpha);
+    
+    drawGradientLine(renderer, x1, y1, x2, y2, borderAlpha, borderAlpha / 2);
+    drawGradientLine(renderer, x2, y2, x3, y3, borderAlpha / 2, borderAlpha / 4);
+    drawGradientLine(renderer, x3, y3, x4, y4, borderAlpha / 4, borderAlpha / 4);
+    drawGradientLine(renderer, x4, y4, x1, y1, borderAlpha / 4, borderAlpha / 2);
+}
+
+// 绘制渐变线条
+void AttackSystem::drawGradientLine(SDL_Renderer* renderer, int x1, int y1, int x2, int y2, Uint8 alpha1, Uint8 alpha2) const {
+    int dx = std::abs(x2 - x1);
+    int dy = std::abs(y2 - y1);
+    int steps = std::max(dx, dy);
+    
+    if (steps == 0) return;
+    
+    for (int i = 0; i <= steps; i++) {
+        float t = static_cast<float>(i) / steps;
+        int x = x1 + static_cast<int>(t * (x2 - x1));
+        int y = y1 + static_cast<int>(t * (y2 - y1));
+        Uint8 alpha = static_cast<Uint8>(alpha1 + t * (alpha2 - alpha1));
+        
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
+        SDL_RenderPoint(renderer, x, y);
+    }
+}
+
+// 填充渐变扇形
+void AttackSystem::fillGradientSector(SDL_Renderer* renderer, float cx, float cy, float radius, float startAngle, float endAngle, float animationPhase) const {
+    int radiusSteps = static_cast<int>(radius / 4); // 径向分段
+    int angleSteps = 32; // 角度分段
+    
+    for (int r = 0; r < radiusSteps; r++) {
+        float r1 = (static_cast<float>(r) / radiusSteps) * radius;
+        float r2 = (static_cast<float>(r + 1) / radiusSteps) * radius;
+        
+        // 计算当前环的透明度（从中心向外渐变）
+        float centerAlpha = 100 + 50 * std::sin(animationPhase * 3 * M_PI);
+        float progress = static_cast<float>(r) / radiusSteps;
+        Uint8 alpha = static_cast<Uint8>(centerAlpha * (1.0f - progress * 0.7f));
+        
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
+        
+        for (int a = 0; a < angleSteps; a++) {
+            float angle1 = startAngle + (endAngle - startAngle) * a / angleSteps;
+            float angle2 = startAngle + (endAngle - startAngle) * (a + 1) / angleSteps;
+            
+            // 绘制扇形段的四个点形成的四边形
+            int x1 = static_cast<int>(cx + r1 * std::cos(angle1));
+            int y1 = static_cast<int>(cy + r1 * std::sin(angle1));
+            int x2 = static_cast<int>(cx + r2 * std::cos(angle1));
+            int y2 = static_cast<int>(cy + r2 * std::sin(angle1));
+            int x3 = static_cast<int>(cx + r2 * std::cos(angle2));
+            int y3 = static_cast<int>(cy + r2 * std::sin(angle2));
+            int x4 = static_cast<int>(cx + r1 * std::cos(angle2));
+            int y4 = static_cast<int>(cy + r1 * std::sin(angle2));
+            
+            // 简单的四边形填充（用线条近似）
+            SDL_RenderLine(renderer, x1, y1, x2, y2);
+            SDL_RenderLine(renderer, x2, y2, x3, y3);
+            SDL_RenderLine(renderer, x3, y3, x4, y4);
+            SDL_RenderLine(renderer, x4, y4, x1, y1);
+        }
+    }
 } 
