@@ -139,13 +139,13 @@ bool ItemLoader::loadItemsFromJson(const json& jsonData) {
                     }
                 } else {
                     // 创建普通武器（远程、投掷等）
-                    auto weapon = loadWeaponFromJson(weaponJson);
-                    if (weapon) {
-                        std::string name = weapon->getName();
-                        // 先存储在weaponTemplates中
-                        weaponTemplates[name] = std::move(weapon);
-                        // 然后创建一个副本用于itemTemplates
-                        itemTemplates[name] = std::unique_ptr<Item>(weaponTemplates[name]->clone());
+                auto weapon = loadWeaponFromJson(weaponJson);
+                if (weapon) {
+                    std::string name = weapon->getName();
+                    // 先存储在weaponTemplates中
+                    weaponTemplates[name] = std::move(weapon);
+                    // 然后创建一个副本用于itemTemplates
+                    itemTemplates[name] = std::unique_ptr<Item>(weaponTemplates[name]->clone());
                     }
                 }
             }

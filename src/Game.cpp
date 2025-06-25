@@ -57,7 +57,9 @@ Game::Game() :
     MIN_TIME_SCALE(0.1f),
     MAX_TIME_SCALE(10.0f),
     debugMode(false), // 初始化调试模式为关闭状态
-    gameUI(std::make_unique<GameUI>()) // 初始化游戏UI
+    gameUI(std::make_unique<GameUI>()), // 初始化游戏UI
+    hurtEffectIntensity(0.0f), // 初始化受伤效果
+    hurtEffectTime(0.0f)
     // bullets 向量会自动初始化为空
 {
     instance = this;
@@ -287,6 +289,12 @@ bool Game::init() {
                 return false;
             }
 
+            // 初始化伤害数字字体
+            if (!DamageNumber::initFont(font)) {
+                std::cerr << "Failed to initialize DamageNumber font!" << std::endl;
+                // 继续执行，字体失败不应该终止游戏
+            }
+
             // 初始化ItemLoader并加载items.json
             if (!ItemLoader::getInstance()->loadItemsFromFile("jsons/items.json")) {
                 std::cerr << "Failed to load items from JSON!" << std::endl;
@@ -303,12 +311,23 @@ bool Game::init() {
                 if (meleeWeapon) {
                     meleeWeapon->setRarity(ItemRarity::COMMON);
                     
-                    // 将砍刀装备到玩家手上
-                    player->equipItem(std::move(meleeWeapon));
-                    std::cout << "Player equipped with MeleeWeapon: 军用砍刀 (data-driven creation)." << std::endl;
-                } else {
-                    std::cout << "Failed to create MeleeWeapon: 军用砍刀" << std::endl;
-                }
+                                // 将砍刀装备到玩家手上
+            player->equipItem(std::move(meleeWeapon));
+            std::cout << "Player equipped with MeleeWeapon: 军用砍刀 (data-driven creation)." << std::endl;
+        } else {
+            std::cout << "Failed to create MeleeWeapon: 军用砍刀" << std::endl;
+        }
+        
+        // 设置测试技能数据：建造等级5级70%，闪避18级
+        if (player && player->getSkillSystem()) {
+            // 5级70%意味着总经验值为：5*100 + 70 = 570
+            player->getSkillSystem()->addExperience(SkillType::CONSTRUCTION, 570);
+            std::cout << "测试数据：建造技能设置为5级70%" << std::endl;
+            
+            // 18级闪避：18*100 = 1800经验值
+            player->getSkillSystem()->addExperience(SkillType::DODGE, 1800);
+            std::cout << "测试数据：闪避技能设置为18级" << std::endl;
+        }
             }
             
             /*
@@ -786,6 +805,12 @@ void Game::update() {
 
     // 更新远程玩家
     updateRemotePlayers(adjustedDeltaTime);
+    
+    // 更新伤害数字
+    updateDamageNumbers();
+    
+    // 更新受伤屏幕效果
+    updateHurtEffect();
 }
 
 // 修改render方法
@@ -827,6 +852,9 @@ void Game::render() {
     
     // 渲染远程玩家
     renderRemotePlayers();
+    
+    // 渲染伤害数字（在缩放环境下）
+    renderDamageNumbers();
     
     // 恢复原始缩放以渲染HUD
     SDL_SetRenderScale(renderer, 1.0f, 1.0f);
@@ -975,6 +1003,9 @@ void Game::render() {
     
     // 恢复原始缩放
     SDL_SetRenderScale(renderer, currentScaleX, currentScaleY);
+
+    // 渲染受伤屏幕效果（在最后渲染，覆盖在所有UI之上）
+    renderHurtEffect();
 
     // 呈现渲染的内容
     SDL_RenderPresent(renderer);
@@ -1904,4 +1935,110 @@ void Game::renderAttackRange() {
         // 恢复默认混合模式
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }
+}
+
+// 伤害数字相关方法实现
+void Game::addDamageNumber(float x, float y, int damage, bool critical) {
+    damageNumbers.push_back(std::make_unique<DamageNumber>(x, y, damage, critical));
+}
+
+void Game::addDamageNumber(float x, float y, DamageNumberType type, int damage) {
+    damageNumbers.push_back(std::make_unique<DamageNumber>(x, y, type, damage));
+}
+
+void Game::updateDamageNumbers() {
+    // 更新所有伤害数字
+    for (auto& damageNumber : damageNumbers) {
+        damageNumber->update(getAdjustedDeltaTime());
+    }
+    
+    // 移除生命周期结束的伤害数字
+    damageNumbers.erase(
+        std::remove_if(damageNumbers.begin(), damageNumbers.end(),
+            [](const std::unique_ptr<DamageNumber>& number) {
+                return number->shouldDestroy();
+            }),
+        damageNumbers.end()
+    );
+}
+
+void Game::renderDamageNumbers() {
+    // 渲染所有伤害数字
+    for (const auto& damageNumber : damageNumbers) {
+        damageNumber->render(renderer, cameraX, cameraY);
+    }
+}
+
+// 受伤屏幕效果相关方法实现
+void Game::triggerHurtEffect(float intensity) {
+    hurtEffectIntensity = std::min(1.0f, intensity);
+    hurtEffectTime = 0.8f; // 效果持续时间
+}
+
+void Game::updateHurtEffect() {
+    if (hurtEffectTime > 0.0f) {
+        hurtEffectTime -= getAdjustedDeltaTime();
+        if (hurtEffectTime <= 0.0f) {
+            hurtEffectTime = 0.0f;
+            hurtEffectIntensity = 0.0f;
+        } else {
+            // 根据剩余时间调整强度（渐变效果）
+            float normalizedTime = hurtEffectTime / 0.8f;
+            hurtEffectIntensity = hurtEffectIntensity * normalizedTime;
+        }
+    }
+}
+
+void Game::renderHurtEffect() {
+    if (hurtEffectIntensity <= 0.0f) {
+        return;
+    }
+    
+    // 设置混合模式用于透明度渲染
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    
+    // 计算红色透明度
+    Uint8 alpha = static_cast<Uint8>(hurtEffectIntensity * 150); // 最大150透明度，避免完全遮挡
+    
+    // 获取窗口尺寸
+    int windowW, windowH;
+    SDL_GetWindowSize(window, &windowW, &windowH);
+    
+    // 创建渐变效果 - 四边向内渐变
+    const int gradientWidth = 150; // 渐变带的宽度
+    
+    // 顶边渐变
+    for (int i = 0; i < gradientWidth; i++) {
+        float gradientAlpha = (alpha * (gradientWidth - i)) / gradientWidth;
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, static_cast<Uint8>(gradientAlpha));
+        SDL_FRect rect = {0, static_cast<float>(i), static_cast<float>(windowW), 1};
+        SDL_RenderFillRect(renderer, &rect);
+    }
+    
+    // 底边渐变
+    for (int i = 0; i < gradientWidth; i++) {
+        float gradientAlpha = (alpha * (gradientWidth - i)) / gradientWidth;
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, static_cast<Uint8>(gradientAlpha));
+        SDL_FRect rect = {0, static_cast<float>(windowH - gradientWidth + i), static_cast<float>(windowW), 1};
+        SDL_RenderFillRect(renderer, &rect);
+    }
+    
+    // 左边渐变
+    for (int i = 0; i < gradientWidth; i++) {
+        float gradientAlpha = (alpha * (gradientWidth - i)) / gradientWidth;
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, static_cast<Uint8>(gradientAlpha));
+        SDL_FRect rect = {static_cast<float>(i), static_cast<float>(gradientWidth), 1, static_cast<float>(windowH - 2 * gradientWidth)};
+        SDL_RenderFillRect(renderer, &rect);
+    }
+    
+    // 右边渐变
+    for (int i = 0; i < gradientWidth; i++) {
+        float gradientAlpha = (alpha * (gradientWidth - i)) / gradientWidth;
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, static_cast<Uint8>(gradientAlpha));
+        SDL_FRect rect = {static_cast<float>(windowW - gradientWidth + i), static_cast<float>(gradientWidth), 1, static_cast<float>(windowH - 2 * gradientWidth)};
+        SDL_RenderFillRect(renderer, &rect);
+    }
+    
+    // 恢复默认混合模式
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }

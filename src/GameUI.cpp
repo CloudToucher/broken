@@ -10,6 +10,10 @@
 #include <set>
 #include <iomanip>
 #include "EquipmentSystem.h"
+#include "SkillSystem.h"
+
+// 静态常量定义
+const float GameUI::TAB_HEIGHT = 50.0f;
 
 // 将浮点数格式化为保留两位小数的字符串
 std::string formatFloat(float value) {
@@ -54,15 +58,16 @@ std::string getItemTextWithTags(Item* item) {
 GameUI::GameUI()
     : isUIVisible(false), originalTimeScale(1.0f), 
       titleFont(nullptr), subtitleFont(nullptr), itemFont(nullptr), tooltipFont(nullptr),
-      playerWindow(nullptr), hoveredItem(nullptr), mouseX(0), mouseY(0),
+      currentTab(TabType::EQUIPMENT), // 默认选中装备栏
+      equipmentWindow(nullptr), healthWindow(nullptr), skillsWindow(nullptr),
+      hoveredItem(nullptr), mouseX(0), mouseY(0),
       itemTooltipWindow(nullptr), currentPlayer(nullptr),
       isDragging(false), draggedItem(nullptr), sourceStorage(nullptr),
       dragStartX(0), dragStartY(0), handSlotRectValid(false),
-  
       pendingHeldItemToReplace(nullptr), pendingNewItemToHold(nullptr), pendingNewItemSource(nullptr),
       confirmationWindow(nullptr), isConfirmationVisible(false), 
       confirmationCallback(nullptr), originalTimeScaleBeforeConfirmation(1.0f) {
-    // 构造函数中不再创建itemTooltipWindow，移到initFonts方法中
+    // 构造函数中不再创建窗口，移到initFonts方法中
 }
 
 GameUI::~GameUI() {
@@ -98,14 +103,8 @@ bool GameUI::initFonts() {
         return false;
     }
     
-    // 创建玩家UI窗口
-    playerWindow = std::make_unique<UIWindow>(30.0f, 30.0f, 0.0f, 0.0f, SDL_Color{100, 100, 255, 255}, 180);
-    playerWindow->setVisible(false);
-    playerWindow->setElementClickCallback([this](const UIElement& element) {
-        this->onElementClick(element);
-    });
-    // 设置玩家UI窗口的字体
-    playerWindow->setFonts(titleFont, subtitleFont, itemFont);
+    // 初始化标签页窗口
+    initializeTabWindows();
     
     // 创建物品提示框窗口 - 初始位置和尺寸为0，后续会根据内容动态调整
     itemTooltipWindow = std::make_unique<UIWindow>(0.0f, 0.0f, 0.0f, 0.0f, 
@@ -176,7 +175,9 @@ void GameUI::openPlayerUI(Game* game, Player* player) {
         
         // 显示界面
         isUIVisible = true;
-        playerWindow->setVisible(true);
+        if (UIWindow* currentWindow = getCurrentTabWindow()) {
+            currentWindow->setVisible(true);
+        }
         
         // 如果有当前玩家引用，更新UI
         if (currentPlayer) {
@@ -190,9 +191,11 @@ void GameUI::closePlayerUI(Game* game) {
         // 恢复游戏倍率
         game->setTimeScale(originalTimeScale);
         
-        // 隐藏界面
+        // 隐藏所有标签页窗口
         isUIVisible = false;
-        playerWindow->setVisible(false);
+        equipmentWindow->setVisible(false);
+        healthWindow->setVisible(false);
+        skillsWindow->setVisible(false);
     }
 }
 
@@ -218,20 +221,26 @@ void GameUI::updatePlayerUI() {
 }
 
 void GameUI::updatePlayerUI(Player* player) {
-    if (!player || !playerWindow) return;
+    if (!player) return;
+    
+    // 只在装备栏标签页更新装备UI
+    if (currentTab != TabType::EQUIPMENT) return;
+    
+    UIWindow* currentWindow = getCurrentTabWindow();
+    if (!currentWindow) return;
     
     // 更新当前玩家引用
     currentPlayer = player;
     
-    playerWindow->clearElements();
+    currentWindow->clearElements();
     
     // 添加标题
     UIElement title("玩家背包", 20.0f, 60.0f, {255, 255, 255, 255}, UIElementType::TITLE);
-    playerWindow->addElement(title);
+    currentWindow->addElement(title);
     
     // 添加手持位显示
     UIElement handSlotTitle("手持物品", 20.0f, 45.0f, {255, 215, 0, 255}, UIElementType::SUBTITLE);
-    playerWindow->addElement(handSlotTitle);
+    currentWindow->addElement(handSlotTitle);
     
     // 获取手持物品
     Item* heldItem = player->getHeldItem();
@@ -260,20 +269,20 @@ void GameUI::updatePlayerUI(Player* player) {
         
         UIElement heldItemElement(getItemTextWithTags(heldItem), 40.0f, 32.0f, itemColor, UIElementType::TEXT);
         heldItemElement.setDataPtr(heldItem);
-        playerWindow->addElement(heldItemElement);
+        currentWindow->addElement(heldItemElement);
     } else {
         // 如果没有手持物品，显示空
         UIElement emptyHandElement("<空>", 40.0f, 32.0f, {150, 150, 150, 255}, UIElementType::TEXT);
-        playerWindow->addElement(emptyHandElement);
+        currentWindow->addElement(emptyHandElement);
     }
     
     // 添加额外间距
     UIElement spacer1("", 0.0f, 20.0f, {255, 255, 255, 255}, UIElementType::TEXT);
-    playerWindow->addElement(spacer1);
+    currentWindow->addElement(spacer1);
     
     // 添加装备信息
     UIElement equipTitle("已装备物品:", 20.0f, 45.0f, {200, 200, 255, 255}, UIElementType::SUBTITLE);
-    playerWindow->addElement(equipTitle);
+    currentWindow->addElement(equipTitle);
     
     // 获取装备系统
     EquipmentSystem* equipSystem = player->getEquipmentSystem();
@@ -322,7 +331,7 @@ void GameUI::updatePlayerUI(Player* player) {
             
             // 创建槽位标签元素
             UIElement slotElement(slotName + "：", 40.0f, 0.0f, {200, 200, 200, 255});
-            playerWindow->addElement(slotElement);
+            currentWindow->addElement(slotElement);
             
             // 计算物品元素的X偏移量，基于槽位标签的长度
             float itemXOffset = 40.0f + slotName.length() * 14.0f; // 估算文本宽度
@@ -361,7 +370,7 @@ void GameUI::updatePlayerUI(Player* player) {
                         // 显示物品名称
                         UIElement itemElement(equippedItem->getName(), itemXOffset, 0.0f, itemColor);
                         itemElement.setDataPtr(equippedItem);
-                        playerWindow->addElement(itemElement);
+                        currentWindow->addElement(itemElement);
                         
                         // 更新下一个物品的X偏移量
                         itemXOffset += equippedItem->getName().length() * 14.0f + 20.0f; // 估算文本宽度并添加间距
@@ -394,7 +403,7 @@ void GameUI::updatePlayerUI(Player* player) {
                         // 显示物品名称
                         UIElement itemElement(equippedItem->getName(), itemXOffset, 0.0f, itemColor);
                         itemElement.setDataPtr(equippedItem);
-                        playerWindow->addElement(itemElement);
+                        currentWindow->addElement(itemElement);
                         
                         // 更新下一个物品的X偏移量
                         itemXOffset += equippedItem->getName().length() * 14.0f + 20.0f; // 估算文本宽度并添加间距
@@ -404,12 +413,12 @@ void GameUI::updatePlayerUI(Player* player) {
             else {
                 // 如果该槽位没有装备物品，显示<空>
                 UIElement emptyElement("<空>", itemXOffset, 0.0f, {150, 150, 150, 255});
-                playerWindow->addElement(emptyElement);
+                currentWindow->addElement(emptyElement);
             }
             
             // 在一行物品后添加Y轴偏移，为下一行做准备
             UIElement spacerElement("", 0.0f, 32.0f, {0, 0, 0, 0});
-            playerWindow->addElement(spacerElement);
+            currentWindow->addElement(spacerElement);
         }
     }
         
@@ -417,11 +426,11 @@ void GameUI::updatePlayerUI(Player* player) {
     
     // 添加额外间距
     UIElement spacer2("", 0.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT);
-    playerWindow->addElement(spacer2);
+    currentWindow->addElement(spacer2);
     
     // 添加背包信息
     UIElement backpackTitle("背包物品:", 20.0f, 45.0f, {200, 255, 200, 255}, UIElementType::SUBTITLE);
-    playerWindow->addElement(backpackTitle);
+    currentWindow->addElement(backpackTitle);
     
     // 获取所有存储空间
     auto storagePairs = player->getAllAvailableStorages();
@@ -444,18 +453,18 @@ void GameUI::updatePlayerUI(Player* player) {
         // 添加折叠/展开按钮 - 放在存储空间信息前面，这样会显示在同一行
         // 考虑到UIElement的X坐标会被fontSizeRatio(1.3)缩放，需要预先除以缩放比例
         float fontSizeRatio = 1.3f; // TEXT类型的字体大小比例
-        float targetButtonX = playerWindow->getWidth() - 40.0f; // 目标位置
+        float targetButtonX = currentWindow->getWidth() - 40.0f; // 目标位置
         float buttonX = targetButtonX / fontSizeRatio; // 补偿缩放效果
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "折叠按钮位置: 窗体宽度=%.1f, 目标X=%.1f, 补偿后X=%.1f, 比例=%.1f", 
-                   playerWindow->getWidth(), targetButtonX, buttonX, fontSizeRatio);
+                   currentWindow->getWidth(), targetButtonX, buttonX, fontSizeRatio);
         UIElement collapseButton(storage->getIsCollapsed() ? "+" : "-", buttonX, 0.0f, 
                                 storage->getIsCollapsed() ? SDL_Color{255, 150, 150, 255} : SDL_Color{200, 200, 200, 255},
                                 UIElementType::TEXT);
         collapseButton.setDataPtr(storage);
-        playerWindow->addElement(collapseButton);
+        currentWindow->addElement(collapseButton);
         
         UIElement storageInfoElement(storageInfo, 20.0f, 45.0f, {200, 200, 200, 255}, UIElementType::SUBTITLE);
-        playerWindow->addElement(storageInfoElement);
+        currentWindow->addElement(storageInfoElement);
         
         // 只有在非折叠状态下才显示物品
         if (!storage->getIsCollapsed()) {
@@ -487,7 +496,7 @@ void GameUI::updatePlayerUI(Player* player) {
                     
                     UIElement itemElement(getItemTextWithTags(item), 40.0f, 32.0f, itemColor, UIElementType::TEXT);
                     itemElement.setDataPtr(item);
-                    playerWindow->addElement(itemElement);
+                    currentWindow->addElement(itemElement);
                 }
             }
         }
@@ -495,7 +504,7 @@ void GameUI::updatePlayerUI(Player* player) {
         // 在每个存储空间后添加一个空白的占位元素，增加存储空间之间的间距
         // 使用透明色（alpha=0）使其不可见，但仍占用空间
         UIElement storageSpacer("", 0.0f, 15.0f, {0, 0, 0, 0}, UIElementType::TEXT);
-        playerWindow->addElement(storageSpacer);
+        currentWindow->addElement(storageSpacer);
     }
 
 }
@@ -503,140 +512,150 @@ void GameUI::updatePlayerUI(Player* player) {
 void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeight) {
     if (!renderer) return;
     
-    // 渲染玩家UI窗口（如果可见）
-    if (isUIVisible && playerWindow) {
-        // 设置窗口尺寸（占据左半屏幕）
-        playerWindow->setWidth(windowWidth / 2 - 45.0f);
-        playerWindow->setHeight(windowHeight - 60.0f);
-        playerWindow->render(renderer, windowWidth, windowHeight);
+    // 渲染标签页系统（如果可见）
+    if (isUIVisible) {
+        // 渲染标签栏
+        renderTabBar(renderer, windowWidth, windowHeight);
         
-        // 调试模式：渲染元素边框
-        // playerWindow->renderElementBorders(renderer);
+        // 渲染当前标签页窗口
+        UIWindow* currentWindow = getCurrentTabWindow();
+        if (currentWindow) {
+            // 设置窗口尺寸（占据左半屏幕，高度减去标签栏）
+            currentWindow->setWidth(windowWidth / 2 - 45.0f);
+            currentWindow->setHeight(windowHeight - 60.0f - TAB_HEIGHT);
+            currentWindow->render(renderer, windowWidth, windowHeight);
         
-        // 更新存储空间坐标映射
-        updateStorageCoordinatesMap();
-        
-        // 更新手持位坐标
-        updateHandSlotRect();
-        
-        // 如果正在拖拽物品，显示可以容纳该物品的存储空间的绿色边框
-        if (isDragging && draggedItem) {            
-            // 遍历所有存储空间
-            int validStorageCount = 0;
+            // 调试模式：渲染元素边框
+            // currentWindow->renderElementBorders(renderer);
             
-            for (const auto& coords : storageCoordinatesMap) {
-                // 检查存储空间是否能容纳被拖拽的物品
-                bool canFit = coords.storage && coords.storage != sourceStorage && coords.storage->canFitItem(draggedItem);
+            // 只在装备栏标签页更新存储空间相关功能
+            if (currentTab == TabType::EQUIPMENT) {
+                // 更新存储空间坐标映射
+                updateStorageCoordinatesMap();
                 
-                if (canFit) {
-                    validStorageCount++;
-                    
-                    // 设置淡绿色边框，增加透明度使其更明显
-                    SDL_SetRenderDrawColor(renderer, 100, 255, 100, 255); // 淡绿色，完全不透明
-                    
-                    // 绘制边框（左右两侧）
-                    SDL_FRect leftBorder = {
-                        coords.topLeftX,
-                        coords.topLeftY,
-                        3.0f, // 更细的边框宽度
-                        coords.bottomRightY - coords.topLeftY
-                    };
-                    
-                    SDL_FRect rightBorder = {
-                        coords.bottomRightX - 3.0f, // 调整位置以适应新宽度
-                        coords.topLeftY,
-                        3.0f, // 更细的边框宽度
-                        coords.bottomRightY - coords.topLeftY
-                    };
-                    
-                    // 绘制边框
-                    SDL_RenderFillRect(renderer, &leftBorder);
-                    SDL_RenderFillRect(renderer, &rightBorder);
-                    
-                    // 绘制顶部和底部边框
-                    SDL_FRect topBorder = {
-                        coords.topLeftX,
-                        coords.topLeftY,
-                        coords.bottomRightX - coords.topLeftX,
-                        3.0f // 更细的边框高度
-                    };
-                    
-                    SDL_FRect bottomBorder = {
-                        coords.topLeftX,
-                        coords.bottomRightY - 3.0f,
-                        coords.bottomRightX - coords.topLeftX,
-                        3.0f // 更细的边框高度
-                    };
-                    
-                    // 绘制顶部和底部边框
-                    SDL_RenderFillRect(renderer, &topBorder);
-                    SDL_RenderFillRect(renderer, &bottomBorder);
-                }
-            }
+                // 更新手持位坐标
+                updateHandSlotRect();
             
-            // 绘制手持位边框（只有在没有手持物品且正在拖拽来自存储空间的物品时才显示）
-            // 使用当前渲染的player而不是currentPlayer，确保状态一致性
-            Player* renderPlayer = Game::getInstance()->getPlayer();
-            if (sourceStorage && renderPlayer && !renderPlayer->getHeldItem() && handSlotRectValid) {
-                // 使用动态计算的手持位区域
-                // 设置橙色边框表示手持位
-                SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255); // 橙色
-                
-                // 绘制手持位边框（铺满整个窗口宽度）
-                float windowX = playerWindow->getX();
-                float windowWidth = playerWindow->getWidth();
-                
-                SDL_FRect leftBorder = {
-                    windowX + 10.0f, // 从窗口左边距开始
-                    handSlotRect.y,
-                    3.0f,
-                    handSlotRect.height
-                };
-                
-                SDL_FRect rightBorder = {
-                    windowX + windowWidth - 13.0f, // 到窗口右边距结束
-                    handSlotRect.y,
-                    3.0f,
-                    handSlotRect.height
-                };
-                
-                SDL_FRect topBorder = {
-                    windowX + 10.0f, // 从窗口左边距开始
-                    handSlotRect.y,
-                    windowWidth - 20.0f, // 铺满整个窗口宽度（减去边距）
-                    3.0f
-                };
-                
-                SDL_FRect bottomBorder = {
-                    windowX + 10.0f, // 从窗口左边距开始
-                    handSlotRect.y + handSlotRect.height - 3.0f,
-                    windowWidth - 20.0f, // 铺满整个窗口宽度（减去边距）
-                    3.0f
-                };
-                
-                // 绘制边框
-                SDL_RenderFillRect(renderer, &leftBorder);
-                SDL_RenderFillRect(renderer, &rightBorder);
-                SDL_RenderFillRect(renderer, &topBorder);
-                SDL_RenderFillRect(renderer, &bottomBorder);
-            }
-            
-            // 显示有效存储空间数量
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-            SDL_FRect debugRect2 = {10, 35, 300, 20};
-            SDL_RenderFillRect(renderer, &debugRect2);
-            
-            std::string validText = "可容纳的存储空间数量: " + std::to_string(validStorageCount);
-            if (itemFont) {
-                SDL_Surface* textSurface = TTF_RenderText_Solid(itemFont, validText.c_str(), 0, {0, 0, 0, 255});
-                if (textSurface) {
-                    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-                    if (textTexture) {
-                        SDL_FRect textRect = {10, 35, static_cast<float>(textSurface->w), static_cast<float>(textSurface->h)};
-                        SDL_RenderTexture(renderer, textTexture, NULL, &textRect);
-                        SDL_DestroyTexture(textTexture);
+                // 如果正在拖拽物品，显示可以容纳该物品的存储空间的绿色边框
+                if (isDragging && draggedItem) {            
+                    // 遍历所有存储空间
+                    int validStorageCount = 0;
+                    
+                    for (const auto& coords : storageCoordinatesMap) {
+                        // 检查存储空间是否能容纳被拖拽的物品
+                        bool canFit = coords.storage && coords.storage != sourceStorage && coords.storage->canFitItem(draggedItem);
+                        
+                        if (canFit) {
+                            validStorageCount++;
+                            
+                            // 设置淡绿色边框，增加透明度使其更明显
+                            SDL_SetRenderDrawColor(renderer, 100, 255, 100, 255); // 淡绿色，完全不透明
+                            
+                            // 绘制边框（左右两侧）
+                            SDL_FRect leftBorder = {
+                                coords.topLeftX,
+                                coords.topLeftY,
+                                3.0f, // 更细的边框宽度
+                                coords.bottomRightY - coords.topLeftY
+                            };
+                            
+                            SDL_FRect rightBorder = {
+                                coords.bottomRightX - 3.0f, // 调整位置以适应新宽度
+                                coords.topLeftY,
+                                3.0f, // 更细的边框宽度
+                                coords.bottomRightY - coords.topLeftY
+                            };
+                            
+                            // 绘制边框
+                            SDL_RenderFillRect(renderer, &leftBorder);
+                            SDL_RenderFillRect(renderer, &rightBorder);
+                            
+                            // 绘制顶部和底部边框
+                            SDL_FRect topBorder = {
+                                coords.topLeftX,
+                                coords.topLeftY,
+                                coords.bottomRightX - coords.topLeftX,
+                                3.0f // 更细的边框高度
+                            };
+                            
+                            SDL_FRect bottomBorder = {
+                                coords.topLeftX,
+                                coords.bottomRightY - 3.0f,
+                                coords.bottomRightX - coords.topLeftX,
+                                3.0f // 更细的边框高度
+                            };
+                            
+                            // 绘制顶部和底部边框
+                            SDL_RenderFillRect(renderer, &topBorder);
+                            SDL_RenderFillRect(renderer, &bottomBorder);
+                        }
                     }
-                    SDL_DestroySurface(textSurface);
+                    
+                    // 绘制手持位边框（只有在没有手持物品且正在拖拽来自存储空间的物品时才显示）
+                    // 使用当前渲染的player而不是currentPlayer，确保状态一致性
+                    Player* renderPlayer = Game::getInstance()->getPlayer();
+                    if (sourceStorage && renderPlayer && !renderPlayer->getHeldItem() && handSlotRectValid) {
+                        // 使用动态计算的手持位区域
+                        // 设置橙色边框表示手持位
+                        SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255); // 橙色
+                        
+                        // 绘制手持位边框（铺满整个窗口宽度）
+                        float windowX = currentWindow->getX();
+                        float windowWidth = currentWindow->getWidth();
+                        
+                        SDL_FRect leftBorder = {
+                            windowX + 10.0f, // 从窗口左边距开始
+                            handSlotRect.y,
+                            3.0f,
+                            handSlotRect.height
+                        };
+                        
+                        SDL_FRect rightBorder = {
+                            windowX + windowWidth - 13.0f, // 到窗口右边距结束
+                            handSlotRect.y,
+                            3.0f,
+                            handSlotRect.height
+                        };
+                        
+                        SDL_FRect topBorder = {
+                            windowX + 10.0f, // 从窗口左边距开始
+                            handSlotRect.y,
+                            windowWidth - 20.0f, // 铺满整个窗口宽度（减去边距）
+                            3.0f
+                        };
+                        
+                        SDL_FRect bottomBorder = {
+                            windowX + 10.0f, // 从窗口左边距开始
+                            handSlotRect.y + handSlotRect.height - 3.0f,
+                            windowWidth - 20.0f, // 铺满整个窗口宽度（减去边距）
+                            3.0f
+                        };
+                        
+                        // 绘制边框
+                        SDL_RenderFillRect(renderer, &leftBorder);
+                        SDL_RenderFillRect(renderer, &rightBorder);
+                        SDL_RenderFillRect(renderer, &topBorder);
+                        SDL_RenderFillRect(renderer, &bottomBorder);
+                    }
+                    
+                    // 显示有效存储空间数量
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                    SDL_FRect debugRect2 = {10, 35, 300, 20};
+                    SDL_RenderFillRect(renderer, &debugRect2);
+                    
+                    std::string validText = "可容纳的存储空间数量: " + std::to_string(validStorageCount);
+                    if (itemFont) {
+                        SDL_Surface* textSurface = TTF_RenderText_Solid(itemFont, validText.c_str(), 0, {0, 0, 0, 255});
+                        if (textSurface) {
+                            SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+                            if (textTexture) {
+                                SDL_FRect textRect = {10, 35, static_cast<float>(textSurface->w), static_cast<float>(textSurface->h)};
+                                SDL_RenderTexture(renderer, textTexture, NULL, &textRect);
+                                SDL_DestroyTexture(textTexture);
+                            }
+                            SDL_DestroySurface(textSurface);
+                        }
+                    }
                 }
             }
         }
@@ -656,7 +675,7 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
     if (isDragging && draggedItem) {
         // 创建一个临时的文本表面
         SDL_Color textColor = {255, 255, 255, 200};
-        SDL_Surface* textSurface = TTF_RenderText_Blended(itemFont, draggedItem->getName().c_str(), draggedItem->getName().length(), textColor);
+        SDL_Surface* textSurface = TTF_RenderText_Blended(itemFont, draggedItem->getName().c_str(), 0, textColor);
         if (textSurface) {
             // 创建纹理
             SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
@@ -699,17 +718,20 @@ void GameUI::updateHoveredItem(int mouseX, int mouseY) {
     // 重置悬停物品指针
     hoveredItem = nullptr;
 
-    // 检查玩家背包UI
-    if (isUIVisible && playerWindow) {
-        int elementIndex = playerWindow->getElementAtPosition(mouseX, mouseY);
-        if (elementIndex >= 0) {
-            const auto& elements = playerWindow->getElements();
-            if (elementIndex < static_cast<int>(elements.size())) {
-                // 检查元素文本，如果是折叠/展开按钮（+或-），则不将其视为物品
-                const std::string& text = elements[elementIndex].getText();
-                if (text != "+" && text != "-") {
-                    // 只有非折叠按钮的元素才可能是物品
-                    hoveredItem = static_cast<Item*>(elements[elementIndex].getDataPtr());
+    // 检查玩家背包UI（只在装备栏标签页检查悬停物品）
+    if (isUIVisible && currentTab == TabType::EQUIPMENT) {
+        UIWindow* currentWindow = getCurrentTabWindow();
+        if (currentWindow) {
+            int elementIndex = currentWindow->getElementAtPosition(mouseX, mouseY);
+            if (elementIndex >= 0) {
+                const auto& elements = currentWindow->getElements();
+                if (elementIndex < static_cast<int>(elements.size())) {
+                    // 检查元素文本，如果是折叠/展开按钮（+或-），则不将其视为物品
+                    const std::string& text = elements[elementIndex].getText();
+                    if (text != "+" && text != "-") {
+                        // 只有非折叠按钮的元素才可能是物品
+                        hoveredItem = static_cast<Item*>(elements[elementIndex].getDataPtr());
+                    }
                 }
             }
         }
@@ -1026,62 +1048,68 @@ bool GameUI::handleClick(int mouseX, int mouseY, Player* player, float windowWid
         return true;
     }
     
-
+    // 检查标签栏点击
+    if (handleTabBarClick(mouseX, mouseY, windowWidth, windowHeight)) {
+        return true; // 点击被标签栏处理了
+    }
     
-    // 检查玩家背包UI
-    if (isUIVisible && playerWindow) {
-        // 检查是否点击了物品元素
-        int elementIndex = playerWindow->getElementAtPosition(mouseX, mouseY);
-        if (elementIndex >= 0) {
-            const auto& elements = playerWindow->getElements();
-            if (elementIndex < static_cast<int>(elements.size())) {
-                // 检查元素文本，如果是折叠/展开按钮（+或-），则不将其视为物品
-                const std::string& text = elements[elementIndex].getText();
-                if (text != "+" && text != "-") {
-                    // 只有非折叠按钮的元素才可能是物品
-                    Item* clickedItem = static_cast<Item*>(elements[elementIndex].getDataPtr());
-                    if (clickedItem) {
-                        // 检查是否点击的是已装备的物品
-                        bool isEquippedItem = false;
-                        EquipmentSystem* equipSystem = player->getEquipmentSystem();
-                        EquipSlot clickedItemSlot = EquipSlot::NONE;
-                        
-                        if (equipSystem) {
-                            // 获取已装备的槽位
-                            auto equippedSlots = equipSystem->getEquippedSlots();
+    // 检查玩家背包UI（只在装备栏标签页处理物品点击）
+    if (isUIVisible && currentTab == TabType::EQUIPMENT) {
+        UIWindow* currentWindow = getCurrentTabWindow();
+        if (currentWindow) {
+            // 检查是否点击了物品元素
+            int elementIndex = currentWindow->getElementAtPosition(mouseX, mouseY);
+            if (elementIndex >= 0) {
+                const auto& elements = currentWindow->getElements();
+                if (elementIndex < static_cast<int>(elements.size())) {
+                    // 检查元素文本，如果是折叠/展开按钮（+或-），则不将其视为物品
+                    const std::string& text = elements[elementIndex].getText();
+                    if (text != "+" && text != "-") {
+                        // 只有非折叠按钮的元素才可能是物品
+                        Item* clickedItem = static_cast<Item*>(elements[elementIndex].getDataPtr());
+                        if (clickedItem) {
+                            // 检查是否点击的是已装备的物品
+                            bool isEquippedItem = false;
+                            EquipmentSystem* equipSystem = player->getEquipmentSystem();
+                            EquipSlot clickedItemSlot = EquipSlot::NONE;
                             
-                            // 遍历已装备的槽位，检查点击的物品是否是已装备的物品
-                            for (auto slot : equippedSlots) {
-                                auto equippedItems = equipSystem->getEquippedItems(slot);
-                                for (auto* equippedItem : equippedItems) {
-                                    if (equippedItem == clickedItem) {
-                                        isEquippedItem = true;
-                                        clickedItemSlot = slot;
-                                        break;
+                            if (equipSystem) {
+                                // 获取已装备的槽位
+                                auto equippedSlots = equipSystem->getEquippedSlots();
+                                
+                                // 遍历已装备的槽位，检查点击的物品是否是已装备的物品
+                                for (auto slot : equippedSlots) {
+                                    auto equippedItems = equipSystem->getEquippedItems(slot);
+                                    for (auto* equippedItem : equippedItems) {
+                                        if (equippedItem == clickedItem) {
+                                            isEquippedItem = true;
+                                            clickedItemSlot = slot;
+                                            break;
+                                        }
                                     }
+                                    if (isEquippedItem) break; // 如果找到了，就不再继续查找
                                 }
-                                if (isEquippedItem) break; // 如果找到了，就不再继续查找
                             }
+                            
+                            // 删除已装备物品左键点击就卸下的逻辑，改为只支持拖拽操作
+                            // 开始拖拽
+                            isDragging = true;
+                            draggedItem = clickedItem;
+                            dragStartX = mouseX;
+                            dragStartY = mouseY;
+                            
+                            // 查找源存储空间
+                            sourceStorage = findStorageByCoordinates(mouseX, mouseY);
+                            
+                            // 更新存储空间坐标映射
+                            updateStorageCoordinatesMap();
                         }
-                        
-                        // 删除已装备物品左键点击就卸下的逻辑，改为只支持拖拽操作
-                        // 开始拖拽
-                        isDragging = true;
-                        draggedItem = clickedItem;
-                        dragStartX = mouseX;
-                        dragStartY = mouseY;
-                        
-                        // 查找源存储空间
-                        sourceStorage = findStorageByCoordinates(mouseX, mouseY);
-                        
-                        // 更新存储空间坐标映射
-                        updateStorageCoordinatesMap();
                     }
                 }
             }
+            
+            return currentWindow->handleClick(mouseX, mouseY, windowWidth, windowHeight);
         }
-        
-        return playerWindow->handleClick(mouseX, mouseY, windowWidth, windowHeight);
     }
     
     return false;
@@ -1093,29 +1121,32 @@ bool GameUI::handleStorageClick(int mouseX, int mouseY, Player* player, Storage*
         currentPlayer = player;
     }
     
-    // 检查玩家背包UI中的Storage折叠/展开按钮
-    if (isUIVisible && playerWindow) {
-        int elementIndex = playerWindow->getElementAtPosition(mouseX, mouseY);
-        if (elementIndex >= 0) {
-            const auto& elements = playerWindow->getElements();
-            if (elementIndex < static_cast<int>(elements.size())) {
-                // 检查是否点击了Storage元素
-                void* dataPtr = elements[elementIndex].getDataPtr();
-                if (dataPtr) {
-                    // 尝试将数据指针转换为Storage
-                    Storage* storage = static_cast<Storage*>(dataPtr);
-                    
-                    // 检查是否为折叠/展开按钮（通过文本判断）
-                    if (elements[elementIndex].getText() == "+" || elements[elementIndex].getText() == "-") {
-                        // 切换折叠状态
-                        storage->setIsCollapsed(!storage->getIsCollapsed());
+    // 检查玩家背包UI中的Storage折叠/展开按钮（只在装备栏标签页）
+    if (isUIVisible && currentTab == TabType::EQUIPMENT) {
+        UIWindow* currentWindow = getCurrentTabWindow();
+        if (currentWindow) {
+            int elementIndex = currentWindow->getElementAtPosition(mouseX, mouseY);
+            if (elementIndex >= 0) {
+                const auto& elements = currentWindow->getElements();
+                if (elementIndex < static_cast<int>(elements.size())) {
+                    // 检查是否点击了Storage元素
+                    void* dataPtr = elements[elementIndex].getDataPtr();
+                    if (dataPtr) {
+                        // 尝试将数据指针转换为Storage
+                        Storage* storage = static_cast<Storage*>(dataPtr);
                         
-                        // 更新UI
-                        if (player) {
-                            updatePlayerUI(player);
+                        // 检查是否为折叠/展开按钮（通过文本判断）
+                        if (elements[elementIndex].getText() == "+" || elements[elementIndex].getText() == "-") {
+                            // 切换折叠状态
+                            storage->setIsCollapsed(!storage->getIsCollapsed());
+                            
+                            // 更新UI
+                            if (player) {
+                                updatePlayerUI(player);
+                            }
+                            
+                            return true; // 点击已处理
                         }
-                        
-                        return true; // 点击已处理
                     }
                 }
             }
@@ -1126,14 +1157,19 @@ bool GameUI::handleStorageClick(int mouseX, int mouseY, Player* player, Storage*
 }
 
 Storage* GameUI::findStorageByCoordinates(int x, int y) {
-    // 检查玩家UI是否可见
-    if (!isUIVisible || !playerWindow || !currentPlayer) {
+    // 检查玩家UI是否可见且在装备栏标签页
+    if (!isUIVisible || currentTab != TabType::EQUIPMENT || !currentPlayer) {
+        return nullptr;
+    }
+    
+    UIWindow* currentWindow = getCurrentTabWindow();
+    if (!currentWindow) {
         return nullptr;
     }
     
     // 首先检查点击是否在窗口区域内
-    if (x < playerWindow->getX() || x > playerWindow->getX() + playerWindow->getWidth() ||
-        y < playerWindow->getY() || y > playerWindow->getY() + playerWindow->getHeight()) {
+    if (x < currentWindow->getX() || x > currentWindow->getX() + currentWindow->getWidth() ||
+        y < currentWindow->getY() || y > currentWindow->getY() + currentWindow->getHeight()) {
         return nullptr;
     }
     
@@ -1148,13 +1184,13 @@ Storage* GameUI::findStorageByCoordinates(int x, int y) {
     // 如果坐标映射为空或未找到匹配的存储空间，回退到旧方法
     if (storageCoordinatesMap.empty()) {
         // 获取指定坐标的UI元素索引
-        int elementIndex = playerWindow->getElementAtPosition(x, y);
+        int elementIndex = currentWindow->getElementAtPosition(x, y);
         if (elementIndex < 0) {
             return nullptr; // 没有找到元素
         }
         
         // 获取元素列表
-        const auto& elements = playerWindow->getElements();
+        const auto& elements = currentWindow->getElements();
         if (elementIndex >= static_cast<int>(elements.size())) {
             return nullptr; // 索引超出范围
         }
@@ -1217,13 +1253,18 @@ void GameUI::updateStorageCoordinatesMap() {
     // 清空现有映射
     storageCoordinatesMap.clear();
     
-    // 检查玩家窗口是否存在
-    if (!playerWindow || !currentPlayer) {
+    // 检查玩家窗口是否存在且在装备栏标签页
+    if (!isUIVisible || currentTab != TabType::EQUIPMENT || !currentPlayer) {
+        return;
+    }
+    
+    UIWindow* currentWindow = getCurrentTabWindow();
+    if (!currentWindow) {
         return;
     }
     
     // 获取所有UI元素
-    const auto& elements = playerWindow->getElements();
+    const auto& elements = currentWindow->getElements();
     
     // 当前处理的存储空间
     Storage* currentStorage = nullptr;
@@ -1236,7 +1277,7 @@ void GameUI::updateStorageCoordinatesMap() {
         
         // 获取元素的渲染区域
         ElementRenderRect rect;
-        if (!playerWindow->getElementRect(i, rect)) {
+        if (!currentWindow->getElementRect(i, rect)) {
             continue;
         }
         
@@ -1245,9 +1286,9 @@ void GameUI::updateStorageCoordinatesMap() {
             // 如果之前有处理中的存储空间，完成其坐标范围计算
             if (currentStorage) {
                 StorageCoordinates coords;
-                coords.topLeftX = playerWindow->getX();
+                coords.topLeftX = currentWindow->getX();
                 coords.topLeftY = storageStartY;
-                coords.bottomRightX = playerWindow->getX() + playerWindow->getWidth();
+                coords.bottomRightX = currentWindow->getX() + currentWindow->getWidth();
                 coords.bottomRightY = rect.y; // 当前存储空间信息元素的顶部作为上一个存储空间的底部
                 coords.storage = currentStorage;
                 
@@ -1268,10 +1309,10 @@ void GameUI::updateStorageCoordinatesMap() {
     // 处理最后一个存储空间
     if (currentStorage) {
         StorageCoordinates coords;
-        coords.topLeftX = playerWindow->getX();
+        coords.topLeftX = currentWindow->getX();
         coords.topLeftY = storageStartY;
-        coords.bottomRightX = playerWindow->getX() + playerWindow->getWidth();
-        coords.bottomRightY = playerWindow->getY() + playerWindow->getHeight(); // 窗口底部作为最后一个存储空间的底部
+        coords.bottomRightX = currentWindow->getX() + currentWindow->getWidth();
+        coords.bottomRightY = currentWindow->getY() + currentWindow->getHeight(); // 窗口底部作为最后一个存储空间的底部
         coords.storage = currentStorage;
         
         storageCoordinatesMap.push_back(coords);
@@ -1346,22 +1387,25 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     updateHandSlotRect();
     
     // 检查是否拖拽到手持位置（使用铺满窗口宽度的范围，与橙色框一致）
-    if (handSlotRectValid && playerWindow) {
-        float windowX = playerWindow->getX();
-        float windowWidth = playerWindow->getWidth();
-        
-        // 使用与橙色框相同的检测范围：铺满整个窗口宽度
-        float detectStartX = windowX + 10.0f;
-        float detectEndX = windowX + windowWidth - 10.0f;
-        
-        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位检测: 鼠标(%d,%d), 手持区域(%.1f-%.1f,%.1f,%.1f)", 
-                   mouseX, mouseY, 
-                   detectStartX, detectEndX, handSlotRect.y, handSlotRect.height);
-        
-        if (mouseX >= detectStartX && mouseX <= detectEndX &&
-            mouseY >= handSlotRect.y && mouseY <= handSlotRect.y + handSlotRect.height) {
-            droppedOnHeldItemSlot = true;
-            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到手持位置（铺满窗口宽度）");
+    if (handSlotRectValid && currentTab == TabType::EQUIPMENT) {
+        UIWindow* currentWindow = getCurrentTabWindow();
+        if (currentWindow) {
+            float windowX = currentWindow->getX();
+            float windowWidth = currentWindow->getWidth();
+            
+            // 使用与橙色框相同的检测范围：铺满整个窗口宽度
+            float detectStartX = windowX + 10.0f;
+            float detectEndX = windowX + windowWidth - 10.0f;
+            
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位检测: 鼠标(%d,%d), 手持区域(%.1f-%.1f,%.1f,%.1f)", 
+                       mouseX, mouseY, 
+                       detectStartX, detectEndX, handSlotRect.y, handSlotRect.height);
+            
+            if (mouseX >= detectStartX && mouseX <= detectEndX &&
+                mouseY >= handSlotRect.y && mouseY <= handSlotRect.y + handSlotRect.height) {
+                droppedOnHeldItemSlot = true;
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到手持位置（铺满窗口宽度）");
+            }
         }
     }
         
@@ -1830,13 +1874,18 @@ void GameUI::updateHandSlotRect() {
     // 重置手持位坐标有效性
     handSlotRectValid = false;
     
-    // 检查玩家窗口是否存在
-    if (!playerWindow || !currentPlayer) {
+    // 检查玩家窗口是否存在且在装备栏标签页
+    if (!isUIVisible || currentTab != TabType::EQUIPMENT || !currentPlayer) {
+        return;
+    }
+    
+    UIWindow* currentWindow = getCurrentTabWindow();
+    if (!currentWindow) {
         return;
     }
     
     // 获取所有UI元素
-    const auto& elements = playerWindow->getElements();
+    const auto& elements = currentWindow->getElements();
     
     // 精确定位手持物品element
     // 布局顺序：
@@ -1860,15 +1909,304 @@ void GameUI::updateHandSlotRect() {
         
         if (isHandSlotElement) {
             // 获取element的渲染区域
-            if (playerWindow->getElementRect(handSlotElementIndex, handSlotRect)) {
+            if (currentWindow->getElementRect(handSlotElementIndex, handSlotRect)) {
                 handSlotRectValid = true;
                 SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位区域更新: (%.1f,%.1f,%.1f,%.1f), 内容='%s'", 
                            handSlotRect.x, handSlotRect.y, handSlotRect.width, handSlotRect.height, text.c_str());
             }
-                 } else {
-             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "索引2的element不是手持位element: '%s'", text.c_str());
-         }
-     } else {
-         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "UI元素数量不足，无法找到手持位element");
-     }
+        } else {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "索引2的element不是手持位element: '%s'", text.c_str());
+        }
+    } else {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "UI元素数量不足，无法找到手持位element");
+    }
+}
+
+// 标签页系统实现
+
+// 初始化标签页窗口
+void GameUI::initializeTabWindows() {
+    // 计算窗口位置和尺寸（为标题栏留出空间）
+    float windowX = 30.0f;
+    float windowY = 30.0f + TAB_HEIGHT; // 标题栏下方
+    float windowWidth = 0.0f; // 自动调整
+    float windowHeight = 0.0f; // 自动调整
+    
+    // 创建装备栏窗口（原来的playerWindow）
+    equipmentWindow = std::make_unique<UIWindow>(windowX, windowY, windowWidth, windowHeight, 
+                                               SDL_Color{100, 100, 255, 255}, 180);
+    equipmentWindow->setVisible(false);
+    equipmentWindow->setElementClickCallback([this](const UIElement& element) {
+        this->onElementClick(element);
+    });
+    equipmentWindow->setFonts(titleFont, subtitleFont, itemFont);
+    
+    // 创建血量情况窗口
+    healthWindow = std::make_unique<UIWindow>(windowX, windowY, windowWidth, windowHeight, 
+                                            SDL_Color{255, 100, 100, 255}, 180);
+    healthWindow->setVisible(false);
+    healthWindow->setElementClickCallback([this](const UIElement& element) {
+        // 血量窗口的点击处理（暂时空实现）
+    });
+    healthWindow->setFonts(titleFont, subtitleFont, itemFont);
+    
+    // 创建技能等级窗口
+    skillsWindow = std::make_unique<UIWindow>(windowX, windowY, windowWidth, windowHeight, 
+                                            SDL_Color{100, 255, 100, 255}, 180);
+    skillsWindow->setVisible(false);
+    skillsWindow->setElementClickCallback([this](const UIElement& element) {
+        // 技能窗口的点击处理（暂时空实现）
+    });
+    skillsWindow->setFonts(titleFont, subtitleFont, itemFont);
+}
+
+// 切换到指定标签页
+void GameUI::switchToTab(TabType tab) {
+    // 隐藏所有窗口
+    equipmentWindow->setVisible(false);
+    healthWindow->setVisible(false);
+    skillsWindow->setVisible(false);
+    
+    // 更新当前标签页
+    currentTab = tab;
+    
+    // 如果UI可见，显示对应的窗口
+    if (isUIVisible) {
+        UIWindow* targetWindow = getCurrentTabWindow();
+        if (targetWindow) {
+            targetWindow->setVisible(true);
+            
+            // 更新窗口内容
+            if (currentPlayer) {
+                if (tab == TabType::EQUIPMENT) {
+                    updatePlayerUI(currentPlayer);
+                } else if (tab == TabType::HEALTH) {
+                    updateHealthUI();
+                } else if (tab == TabType::SKILLS) {
+                    updateSkillsUI();
+                }
+            }
+        }
+    }
+}
+
+// 渲染标签栏
+void GameUI::renderTabBar(SDL_Renderer* renderer, float windowWidth, float windowHeight) {
+    if (!isUIVisible) return;
+    
+    float tabWidth = 200.0f; // 增加标签宽度，避免文字重叠
+    float tabStartX = 30.0f;
+    float tabY = 30.0f;
+    
+    for (int i = 0; i < TAB_COUNT; i++) {
+        TabType tab = static_cast<TabType>(i);
+        float tabX = tabStartX + i * tabWidth;
+        
+        // 设置标签颜色（选中的标签更亮）
+        SDL_Color tabColor;
+        if (tab == currentTab) {
+            tabColor = {200, 200, 255, 255}; // 选中标签：亮蓝色
+        } else {
+            tabColor = {100, 100, 150, 255}; // 未选中标签：深蓝色
+        }
+        
+        // 绘制标签背景
+        SDL_FRect tabRect = {tabX, tabY, tabWidth, TAB_HEIGHT};
+        SDL_SetRenderDrawColor(renderer, tabColor.r, tabColor.g, tabColor.b, tabColor.a);
+        SDL_RenderFillRect(renderer, &tabRect);
+        
+        // 绘制标签边框
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderRect(renderer, &tabRect);
+        
+        // 绘制标签文字
+        const char* tabName = getTabName(tab);
+        if (tabName && subtitleFont) {
+            SDL_Surface* textSurface = TTF_RenderText_Blended(subtitleFont, tabName, 0, {255, 255, 255, 255});
+            if (textSurface) {
+                SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+                if (textTexture) {
+                    // 计算文字居中位置
+                    float textX = tabX + (tabWidth - textSurface->w) / 2.0f;
+                    float textY = tabY + (TAB_HEIGHT - textSurface->h) / 2.0f;
+                    
+                    SDL_FRect textRect = {textX, textY, (float)textSurface->w, (float)textSurface->h};
+                    SDL_RenderTexture(renderer, textTexture, nullptr, &textRect);
+                    
+                    SDL_DestroyTexture(textTexture);
+                }
+                SDL_DestroySurface(textSurface);
+            }
+        }
+    }
+}
+
+// 处理标签栏点击事件
+bool GameUI::handleTabBarClick(int mouseX, int mouseY, float windowWidth, float windowHeight) {
+    if (!isUIVisible) return false;
+    
+    float tabWidth = 200.0f; // 与renderTabBar保持一致
+    float tabStartX = 30.0f;
+    float tabY = 30.0f;
+    
+    // 检查点击是否在标签栏区域内
+    if (mouseY >= tabY && mouseY <= tabY + TAB_HEIGHT) {
+        for (int i = 0; i < TAB_COUNT; i++) {
+            float tabX = tabStartX + i * tabWidth;
+            if (mouseX >= tabX && mouseX <= tabX + tabWidth) {
+                // 点击了标签页i
+                TabType clickedTab = static_cast<TabType>(i);
+                if (clickedTab != currentTab) {
+                    switchToTab(clickedTab);
+                }
+                return true; // 消费掉点击事件
+            }
+        }
+    }
+    
+    return false;
+}
+
+// 获取当前标签页对应的窗口
+UIWindow* GameUI::getCurrentTabWindow() {
+    switch (currentTab) {
+        case TabType::EQUIPMENT:
+            return equipmentWindow.get();
+        case TabType::HEALTH:
+            return healthWindow.get();
+        case TabType::SKILLS:
+            return skillsWindow.get();
+        default:
+            return equipmentWindow.get();
+    }
+}
+
+// 获取标签页名称
+const char* GameUI::getTabName(TabType tab) const {
+    switch (tab) {
+        case TabType::EQUIPMENT:
+            return "装备栏";
+        case TabType::HEALTH:
+            return "血量情况";
+        case TabType::SKILLS:
+            return "技能等级";
+        default:
+            return "未知";
+    }
+}
+
+// 更新血量情况UI（暂时空实现）
+void GameUI::updateHealthUI() {
+    if (!healthWindow || !currentPlayer) return;
+    
+    healthWindow->clearElements();
+    
+    // 添加标题
+    UIElement title("血量情况", 20.0f, 50.0f, {255, 255, 255, 255}, UIElementType::TITLE);
+    healthWindow->addElement(title);
+    
+    // 添加占位文本
+    UIElement placeholder("血量界面开发中...", 20.0f, 40.0f, {200, 200, 200, 255}, UIElementType::TEXT);
+    healthWindow->addElement(placeholder);
+}
+
+// 更新技能等级UI
+void GameUI::updateSkillsUI() {
+    if (!skillsWindow || !currentPlayer) return;
+    
+    skillsWindow->clearElements();
+    
+    // 添加标题
+    UIElement title("技能等级", 20.0f, 50.0f, {255, 255, 255, 255}, UIElementType::TITLE);
+    skillsWindow->addElement(title);
+    
+    // 添加间距
+    UIElement spacer1("", 0.0f, 20.0f, {255, 255, 255, 255}, UIElementType::TEXT);
+    skillsWindow->addElement(spacer1);
+    
+    // 获取技能系统
+    SkillSystem* skillSystem = currentPlayer->getSkillSystem();
+    if (!skillSystem) return;
+    
+    // 获取所有技能数据
+    const auto& allSkills = skillSystem->getAllSkills();
+    
+    // 按分类显示技能
+    std::vector<std::string> categories = {"火器技能", "近战技能", "生活技能"};
+    
+    for (const std::string& category : categories) {
+        // 添加分类标题
+        UIElement categoryTitle(category, 20.0f, 45.0f, {255, 255, 100, 255}, UIElementType::SUBTITLE);
+        skillsWindow->addElement(categoryTitle);
+        
+        // 添加该分类下的技能
+        for (const auto& skillPair : allSkills) {
+            SkillType skillType = skillPair.first;
+            const Skill& skill = skillPair.second;
+            
+            // 检查技能是否属于当前分类
+            std::string skillCategory = SkillSystem::getSkillCategoryName(skillType);
+            if (skillCategory != category) continue;
+            
+            // 技能名称 - 使用固定宽度对齐
+            std::string skillName = SkillSystem::skillTypeToString(skillType);
+            UIElement nameElement(skillName, 40.0f, 0.0f, {255, 255, 255, 255}, UIElementType::TEXT);
+            skillsWindow->addElement(nameElement);
+            
+            // 计算进度条起始位置（使用固定宽度200像素确保对齐）
+            float progressBarStartX = 40.0f + 200.0f;
+            
+            // 绘制进度条（20个格子，每格代表1级）
+            float gridSize = 20.0f; // 每格的大小
+            float gridSpacing = 2.0f; // 格子间距
+            
+            for (int level = 0; level < 20; level++) {
+                float gridX = progressBarStartX + level * (gridSize + gridSpacing);
+                
+                // 确定格子颜色
+                SDL_Color gridColor;
+                if (level < skill.level) {
+                    // 已升级的等级 - 白色边框，填充
+                    gridColor = {255, 255, 255, 255};
+                } else if (level == skill.level && skill.level < 20) {
+                    // 正在升级的等级 - 白色边框，部分填充
+                    gridColor = {255, 255, 255, 255};
+                } else {
+                    // 未达到的等级 - 灰色边框
+                    gridColor = {100, 100, 100, 255};
+                }
+                
+                // 创建格子元素（使用特殊字符表示方块）
+                std::string gridChar = (level < skill.level) ? "■" : "□";
+                UIElement gridElement(gridChar, gridX, 0.0f, gridColor, UIElementType::TEXT);
+                skillsWindow->addElement(gridElement);
+            }
+            
+            // 等级信息（如 2/20）
+            float levelInfoX = progressBarStartX + 20 * (gridSize + gridSpacing) + 20.0f;
+            std::string levelInfo = std::to_string(skill.level) + "/20";
+            UIElement levelElement(levelInfo, levelInfoX, 0.0f, {200, 200, 255, 255}, UIElementType::TEXT);
+            skillsWindow->addElement(levelElement);
+            
+            // 经验值百分比
+            float expPercentX = levelInfoX + levelInfo.length() * 14.0f + 20.0f;
+            std::string expPercent;
+            if (skill.level >= 20) {
+                expPercent = "MAX";
+            } else {
+                int percentage = (skill.currentLevelExp * 100) / 100; // 当前等级经验百分比
+                expPercent = std::to_string(percentage) + "%";
+            }
+            UIElement expElement(expPercent, expPercentX, 0.0f, {100, 255, 100, 255}, UIElementType::TEXT);
+            skillsWindow->addElement(expElement);
+            
+            // 添加行间距
+            UIElement rowSpacer("", 0.0f, 32.0f, {0, 0, 0, 0}, UIElementType::TEXT);
+            skillsWindow->addElement(rowSpacer);
+        }
+        
+        // 分类间距
+        UIElement categorySpacer("", 0.0f, 20.0f, {0, 0, 0, 0}, UIElementType::TEXT);
+        skillsWindow->addElement(categorySpacer);
+    }
 }

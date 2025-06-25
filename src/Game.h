@@ -19,6 +19,7 @@
 #include "Creature.h" // 添加Creature头文件
 #include "Zombie.h" // 添加Zombie头文件
 #include "Pathfinding.h" // 添加寻路系统头文件
+#include "DamageNumber.h" // 添加伤害数字头文件
 
 // 前向声明
 class Player;
@@ -89,6 +90,13 @@ private:
 
     // 添加寻路管理器
     std::unique_ptr<CreaturePathfinder> pathfinder;
+
+    // 添加伤害数字管理
+    std::vector<std::unique_ptr<DamageNumber>> damageNumbers; // 所有伤害数字
+    
+    // 受伤屏幕效果
+    float hurtEffectIntensity; // 受伤效果强度 (0.0-1.0)
+    float hurtEffectTime;      // 受伤效果持续时间
 
     // 渲染激光效果
     void renderLaserEffect(SDL_Renderer* renderer, float mouseX, float mouseY, Gun* gun);
@@ -219,6 +227,17 @@ public:
     
     // 生成测试地形来验证寻路系统
     void generateTestTerrain();
+    
+    // 伤害数字相关方法
+    void addDamageNumber(float x, float y, int damage, bool critical = false);
+    void addDamageNumber(float x, float y, DamageNumberType type, int damage = 0);
+    void updateDamageNumbers();
+    void renderDamageNumbers();
+    
+    // 受伤屏幕效果相关方法
+    void triggerHurtEffect(float intensity = 0.8f);
+    void updateHurtEffect();
+    void renderHurtEffect();
 };
 
 #endif // GAME_H

@@ -1,5 +1,6 @@
 #include "CreatureAttack.h"
 #include "Creature.h" // 将在后面创建
+#include "Game.h" // 包含Game头文件用于添加伤害数字
 #include <random>
 #include <cmath>
 
@@ -68,6 +69,13 @@ bool CreatureAttack::execute(Creature* attacker, Entity* target) {
         if (onMissCallback) {
             onMissCallback(attacker);
         }
+        
+        // 显示miss飘字
+        Game* game = Game::getInstance();
+        if (game) {
+            game->addDamageNumber(target->getX(), target->getY() - target->getRadius(), DamageNumberType::MISS);
+        }
+        
         return false;
     }
     

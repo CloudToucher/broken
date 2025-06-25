@@ -44,7 +44,9 @@ Creature::Creature(
     targetX(0.0f), targetY(0.0f),
     hasPathTarget(false),
     isFollowingPath(false),
-    moveSpeedModifier(1.0f) {
+    moveSpeedModifier(1.0f),
+    meleeHitDifficulty(0),      // 默认近战命中难度为0
+    rangedHitDifficulty(0) {    // 默认远程命中难度为0
     
     // 根据生物类型设置默认标志
     switch (type) {

@@ -35,8 +35,21 @@ private:
     TTF_Font* itemFont;            // 物品字体
     TTF_Font* tooltipFont;         // 提示框字体
     
-    // UI窗口
-    std::unique_ptr<UIWindow> playerWindow;  // 玩家UI窗口
+    // 标签页系统
+    enum class TabType {
+        EQUIPMENT = 0,  // 装备栏（当前已实现的）
+        HEALTH = 1,     // 血量情况
+        SKILLS = 2      // 技能等级列表
+    };
+    
+    TabType currentTab;              // 当前选中的标签页
+    static const int TAB_COUNT = 3;  // 标签页总数
+    static const float TAB_HEIGHT;   // 标签页标题栏高度
+    
+    // UI窗口（每个标签页对应一个窗口）
+    std::unique_ptr<UIWindow> equipmentWindow;   // 装备栏窗口
+    std::unique_ptr<UIWindow> healthWindow;      // 血量情况窗口
+    std::unique_ptr<UIWindow> skillsWindow;      // 技能等级窗口
     
     // 鼠标悬停物品
     Item* hoveredItem;             // 当前鼠标悬停的物品
@@ -71,6 +84,16 @@ private:
     bool isConfirmationVisible;                        // 确认对话框是否可见
     std::function<void(bool)> confirmationCallback;    // 确认对话框回调函数
     float originalTimeScaleBeforeConfirmation;         // 确认对话框显示前的游戏倍率
+    
+    // 标签页相关方法
+    void initializeTabWindows();
+    void switchToTab(TabType tab);
+    void renderTabBar(SDL_Renderer* renderer, float windowWidth, float windowHeight);
+    bool handleTabBarClick(int mouseX, int mouseY, float windowWidth, float windowHeight);
+    UIWindow* getCurrentTabWindow();
+    const char* getTabName(TabType tab) const;
+    void updateHealthUI();
+    void updateSkillsUI();
     
     // 处理元素点击事件
     void onElementClick(const UIElement& element);

@@ -99,6 +99,10 @@ protected:
     
     // 生物特殊能力
     std::unordered_map<std::string, int> specialAbilities;  // 特殊能力及其等级
+    
+    // 命中难度
+    int meleeHitDifficulty;              // 近战命中难度
+    int rangedHitDifficulty;             // 远程命中难度
 
 public:
     // 构造函数
@@ -223,6 +227,12 @@ public:
     bool hasSpecialAbility(const std::string& name) const;
     int getSpecialAbilityLevel(const std::string& name) const;
     void upgradeSpecialAbility(const std::string& name, int levels = 1);
+    
+    // 命中难度相关
+    int getMeleeHitDifficulty() const { return meleeHitDifficulty; }
+    void setMeleeHitDifficulty(int difficulty) { meleeHitDifficulty = difficulty; }
+    int getRangedHitDifficulty() const { return rangedHitDifficulty; }
+    void setRangedHitDifficulty(int difficulty) { rangedHitDifficulty = difficulty; }
     
     // 感知相关方法
     bool canSeeEntity(Entity* entity) const;

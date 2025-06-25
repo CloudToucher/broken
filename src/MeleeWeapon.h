@@ -63,6 +63,7 @@ public:
     // 获取器
     float getCurrentCooldown() const { return currentCooldown; }
     int getComboCount() const { return comboCount; }
+    int getWeaponAccuracyBonus() const;  // 获取武器命中加成（移到public）
     
     // 攻击模式配置
     void setAttackMode(const std::string& mode, const AttackModeConfig& config);

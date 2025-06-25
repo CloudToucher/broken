@@ -1124,6 +1124,33 @@ bool Entity::takeDamage(const Damage& damage) {
     // 应用伤害
     health -= totalDamage;
     
+    // 生成伤害数字飘字（如果造成了伤害）
+    if (totalDamage > 0) {
+        // 暴击判断逻辑：基于伤害值的简单判断
+        bool isCritical = false;
+        
+        // 高伤害或精准度高时判定为暴击
+        if (totalDamage >= 40) { // 伤害>=40认为是暴击
+            isCritical = true;
+        } else if (damage.getSource() && damage.getPrecision() > 0.9f) {
+            // 或者精准度极高时也是暴击
+            isCritical = true;
+        }
+        
+        // 添加飘字数字到游戏系统
+        Game* gameInstance = Game::getInstance();
+        if (gameInstance) {
+            // 在实体位置稍微偏上一点生成飘字
+            gameInstance->addDamageNumber(x, y - radius - 10, totalDamage, isCritical);
+            
+            // 如果受伤的是玩家，触发受伤屏幕效果
+            if (this == gameInstance->getPlayer()) {
+                float intensity = std::min(1.0f, totalDamage / 100.0f); // 根据伤害计算强度
+                gameInstance->triggerHurtEffect(intensity);
+            }
+        }
+    }
+    
     // 如果生命值降至0或以下，实体死亡
     if (health <= 0) {
         health = 0;

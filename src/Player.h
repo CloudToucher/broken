@@ -10,6 +10,7 @@
 #include <string>
 #include "PlayerStateManager.h" // 添加PlayerStateManager头文件
 #include "AttackSystem.h" // 添加AttackSystem头文件
+#include "SkillSystem.h" // 添加技能系统头文件
 
 // 前向声明
 class PlayerController; // 新增：前向声明PlayerController
@@ -21,6 +22,20 @@ private:
     int AGI;                       // 敏捷 - 影响移动速度和闪避
     int INT;                       // 智力 - 影响技能和魔法
     int PER;                       // 感知 - 影响探测和射击精度
+    
+    // 身体部位血量系统
+    int headHealth;                // 头部血量 (50)
+    int torsoHealth;               // 躯干血量 (120)
+    int leftLegHealth;             // 左腿血量 (90)
+    int rightLegHealth;            // 右腿血量 (90)
+    int leftArmHealth;             // 左臂血量 (75)
+    int rightArmHealth;            // 右臂血量 (75)
+    
+    // 身体部位最大血量（常量）
+    static const int MAX_HEAD_HEALTH = 50;
+    static const int MAX_TORSO_HEALTH = 120;
+    static const int MAX_LEG_HEALTH = 90;
+    static const int MAX_ARM_HEALTH = 75;
     
     int mouseX, mouseY;        // 鼠标位置（世界坐标）
     int screenMouseX, screenMouseY; // 鼠标位置（屏幕坐标）
@@ -51,6 +66,13 @@ private:
     
     // 新增：攻击系统
     std::unique_ptr<AttackSystem> attackSystem;
+    
+    // 新增：技能系统
+    std::unique_ptr<SkillSystem> skillSystem;
+    
+    // 闪避系统
+    int dodgeCount;                // 当前3秒内的闪避次数
+    int lastDodgeResetTime;        // 上次重置闪避次数的时间（毫秒）
 
 public:
     Player(float startX, float startY);
@@ -161,6 +183,62 @@ public:
     void modifyAGI(int delta) { setAGI(AGI + delta); }
     void modifyINT(int delta) { setINT(INT + delta); }
     void modifyPER(int delta) { setPER(PER + delta); }
+    
+    // 新增：技能系统相关方法
+    SkillSystem* getSkillSystem() const { return skillSystem.get(); }
+    
+    // 技能经验值管理
+    void addSkillExperience(SkillType skillType, int experience);
+    int getSkillLevel(SkillType skillType) const;
+    int getTotalSkillExperience(SkillType skillType) const;
+    int getCurrentLevelSkillExperience(SkillType skillType) const;
+    int getExpToNextSkillLevel(SkillType skillType) const;
+    
+    // 便捷方法：根据武器类型获得经验
+    void gainWeaponExperience(const std::string& weaponType, int baseExp = 1);
+    void gainMeleeExperience(const std::string& meleeType, int baseExp = 1);
+    
+    // 身体部位伤害系统
+    enum class BodyPart {
+        HEAD,
+        TORSO, 
+        LEFT_LEG,
+        RIGHT_LEG,
+        LEFT_ARM,
+        RIGHT_ARM
+    };
+    
+    // 身体部位伤害方法
+    void takeDamageToBodyPart(int damage, BodyPart part);
+    BodyPart selectRandomBodyPart() const;
+    
+    // 身体部位血量getter
+    int getHeadHealth() const { return headHealth; }
+    int getTorsoHealth() const { return torsoHealth; }
+    int getLeftLegHealth() const { return leftLegHealth; }
+    int getRightLegHealth() const { return rightLegHealth; }
+    int getLeftArmHealth() const { return leftArmHealth; }
+    int getRightArmHealth() const { return rightArmHealth; }
+    
+    // 获取身体部位最大血量
+    static int getMaxHealthForBodyPart(BodyPart part);
+    
+    // 检查是否死亡
+    bool isDeadFromBodyDamage() const;
+    
+    // 重写基类的takeDamage方法，使用身体部位伤害
+    bool takeDamage(const Damage& damage) override;
+    
+    // 闪避系统方法
+    bool attemptDodge(int attackerDexterity);  // 尝试闪避攻击
+    void updateDodgeCount();                   // 更新闪避次数（每3秒重置）
+    int getMaxDodgesPerWindow() const;         // 获取每3秒最大闪避次数
+    int getCurrentDodgeCount() const { return dodgeCount; }
+    
+    // 近战攻击系统
+    bool performMeleeAttack(Creature* target);  // 执行近战攻击
+    int getHighestDamageSkillLevel(const Damage& damage) const;  // 获取最高伤害对应的技能等级
+    SkillType getSkillTypeFromDamage(const Damage& damage) const;  // 根据伤害类型获取技能类型
 };
 
 #endif // PLAYER_H

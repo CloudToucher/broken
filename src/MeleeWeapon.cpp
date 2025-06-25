@@ -286,6 +286,21 @@ int MeleeWeapon::getWeaponPenetration() const {
     return 5; // 默认穿甲
 }
 
+int MeleeWeapon::getWeaponAccuracyBonus() const {
+    // 根据武器类型设置命中加成
+    if (hasFlag(ItemFlag::DAGGER)) {
+        return 3; // 匕首命中加成高（灵活）
+    } else if (hasFlag(ItemFlag::SWORD)) {
+        return 2; // 剑类命中加成中等（平衡）
+    } else if (hasFlag(ItemFlag::SPEAR)) {
+        return 1; // 长矛命中加成低（范围远但不够灵活）
+    } else if (hasFlag(ItemFlag::HAMMER)) {
+        return 0; // 锤子命中加成最低（笨重）
+    }
+    
+    return 1; // 默认命中加成
+}
+
 // 获取攻击形状
 AttackShape MeleeWeapon::getPrimaryAttackShape() const {
     // 大部分近战武器主攻击都是扇形

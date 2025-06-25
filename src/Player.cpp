@@ -11,6 +11,8 @@
 #include "storage.h" // 包含EntityStateEffect.h
 #include "AttackSystem.h" // 包含攻击系统头文件
 #include "MeleeWeapon.h" // 包含通用近战武器头文件
+#include "Damage.h" // 包含伤害系统头文件
+#include <random> // 包含随机数生成器
 
 
 // 在构造函数中初始化新增变量
@@ -18,7 +20,11 @@ Player::Player(float startX, float startY)
     : Creature(startX, startY, 20, 320, 100, { 255, 0, 0, 255 }, CreatureType::HUMANOID, "Player", Faction::PLAYER),  // 5格/秒 = 320像素/秒
       isMouseLeftDown(false), playerTexture(nullptr), textureInitialized(false),
       playerId(-1), playerName("Player"), isLocalPlayer(true), controller(nullptr),
-      STR(10), AGI(12), INT(16), PER(14) {  // 初始化四个基础属性
+      STR(10), AGI(12), INT(16), PER(14),  // 初始化四个基础属性
+      headHealth(MAX_HEAD_HEALTH), torsoHealth(MAX_TORSO_HEALTH), 
+      leftLegHealth(MAX_LEG_HEALTH), rightLegHealth(MAX_LEG_HEALTH),
+      leftArmHealth(MAX_ARM_HEALTH), rightArmHealth(MAX_ARM_HEALTH),  // 初始化身体部位血量
+      dodgeCount(0), lastDodgeResetTime(0) {  // 初始化闪避系统
     
     // 设置物理引擎属性
     setPhysicalAttributes(70.0f, 12, 10);  // 重量70kg，力量12，敏捷10（人类平衡型）
@@ -40,6 +46,9 @@ Player::Player(float startX, float startY)
     
     // 初始化攻击系统
     attackSystem = std::make_unique<AttackSystem>(this);
+    
+    // 初始化技能系统
+    skillSystem = std::make_unique<SkillSystem>();
     
     // 设置攻击系统的寻找目标函数
     attackSystem->setFindTargetFunction([this](float range) -> Entity* {
@@ -69,6 +78,28 @@ Player::Player(float startX, float startY)
                 std::cout << " (眩晕!)";
             }
             std::cout << std::endl;
+            
+            // 获得技能经验
+            if (heldItem) {
+                if (heldItem->hasFlag(ItemFlag::GUN)) {
+                    // 枪械攻击获得经验
+                    gainWeaponExperience("GUN", result.critical ? 2 : 1);
+                } else if (heldItem->hasFlag(ItemFlag::MELEE)) {
+                    // 近战攻击获得经验
+                    if (heldItem->hasFlag(ItemFlag::SWORD)) {
+                        gainMeleeExperience("SWORD", result.critical ? 2 : 1);
+                    } else if (heldItem->hasFlag(ItemFlag::DAGGER)) {
+                        gainMeleeExperience("DAGGER", result.critical ? 2 : 1);
+                    } else if (heldItem->hasFlag(ItemFlag::HAMMER)) {
+                        gainMeleeExperience("HAMMER", result.critical ? 2 : 1);
+                    } else {
+                        gainMeleeExperience("MELEE", result.critical ? 2 : 1);
+                    }
+                }
+            } else {
+                // 徒手攻击
+                gainMeleeExperience("UNARMED", result.critical ? 2 : 1);
+            }
         }
     });
     
@@ -146,6 +177,9 @@ void Player::update(float deltaTime) {
     if (attackSystem) {
         attackSystem->updateCooldown(static_cast<int>(deltaTime * 1000));
     }
+    
+    // 更新闪避次数
+    updateDodgeCount();
     
     // 更新武器冷却时间
     if (heldItem && heldItem->hasFlag(ItemFlag::MELEE)) {
@@ -479,6 +513,15 @@ void Player::attemptShoot() {
         if (!hasPlayerState("continuous_shot")) {
             addPlayerState(EntityStateEffect::Type::SHOOTING, "shot_feedback", 100); // 100毫秒的射击反馈状态
         }
+        
+        // 获得射击技能经验
+        if (gun->hasFlag(ItemFlag::RIFLE)) {
+            gainWeaponExperience("RIFLE", 1);
+        } else if (gun->hasFlag(ItemFlag::PISTOL)) {
+            gainWeaponExperience("PISTOL", 1);
+        } else {
+            gainWeaponExperience("GUN", 1); // 通用枪械经验
+        }
     }
 }
 
@@ -635,6 +678,14 @@ void Player::attemptAttack(WeaponAttackType type) {
         std::cout << "玩家攻击成功！目标血量: " << result.target->getHealth() << std::endl;
     } else {
         std::cout << "玩家攻击未命中目标！" << std::endl;
+        
+        // 如果有目标但未命中，显示miss
+        if (result.target) {
+            Game* game = Game::getInstance();
+            if (game) {
+                game->addDamageNumber(result.target->getX(), result.target->getY() - result.target->getRadius(), DamageNumberType::MISS);
+            }
+        }
     }
 }
 
@@ -704,4 +755,463 @@ Entity* Player::findAttackTarget(float range) const {
     }
     
     return closestTarget;
+}
+
+// 技能系统相关方法实现
+void Player::addSkillExperience(SkillType skillType, int experience) {
+    if (skillSystem) {
+        skillSystem->addExperience(skillType, experience);
+    }
+}
+
+int Player::getSkillLevel(SkillType skillType) const {
+    if (skillSystem) {
+        return skillSystem->getSkillLevel(skillType);
+    }
+    return 0;
+}
+
+int Player::getTotalSkillExperience(SkillType skillType) const {
+    if (skillSystem) {
+        return skillSystem->getTotalExperience(skillType);
+    }
+    return 0;
+}
+
+int Player::getCurrentLevelSkillExperience(SkillType skillType) const {
+    if (skillSystem) {
+        return skillSystem->getCurrentLevelExperience(skillType);
+    }
+    return 0;
+}
+
+int Player::getExpToNextSkillLevel(SkillType skillType) const {
+    if (skillSystem) {
+        return skillSystem->getExpToNextLevel(skillType);
+    }
+    return 100;
+}
+
+// 便捷方法：根据武器类型获得经验
+void Player::gainWeaponExperience(const std::string& weaponType, int baseExp) {
+    if (!skillSystem) return;
+    
+    // 所有枪械都获得枪法经验
+    if (weaponType == "GUN" || weaponType == "RIFLE" || weaponType == "PISTOL" || 
+        weaponType == "SHOTGUN" || weaponType == "SMG" || weaponType == "SNIPER") {
+        addSkillExperience(SkillType::MARKSMANSHIP, baseExp);
+    }
+    
+    // 根据具体武器类型获得对应技能经验
+    if (weaponType == "PISTOL") {
+        addSkillExperience(SkillType::PISTOL, baseExp * 2);
+    } else if (weaponType == "RIFLE") {
+        addSkillExperience(SkillType::RIFLE, baseExp * 2);
+    } else if (weaponType == "SHOTGUN") {
+        addSkillExperience(SkillType::SHOTGUN, baseExp * 2);
+    } else if (weaponType == "SMG") {
+        addSkillExperience(SkillType::SMG, baseExp * 2);
+    } else if (weaponType == "SNIPER") {
+        addSkillExperience(SkillType::SNIPER, baseExp * 2);
+    } else if (weaponType == "HEAVY_WEAPONS") {
+        addSkillExperience(SkillType::HEAVY_WEAPONS, baseExp * 2);
+    }
+}
+
+// 便捷方法：根据近战武器类型获得经验
+void Player::gainMeleeExperience(const std::string& meleeType, int baseExp) {
+    if (!skillSystem) return;
+    
+    // 所有近战武器都获得近战经验
+    addSkillExperience(SkillType::MELEE, baseExp);
+    
+    // 根据具体近战武器类型获得对应技能经验
+    if (meleeType == "SWORD" || meleeType == "SLASHING") {
+        addSkillExperience(SkillType::SLASHING, baseExp * 2);
+    } else if (meleeType == "DAGGER" || meleeType == "PIERCING") {
+        addSkillExperience(SkillType::PIERCING, baseExp * 2);
+    } else if (meleeType == "HAMMER" || meleeType == "BLUNT") {
+        addSkillExperience(SkillType::BLUNT, baseExp * 2);
+    } else if (meleeType == "UNARMED") {
+        addSkillExperience(SkillType::UNARMED, baseExp * 2);
+    }
+}
+
+// 身体部位伤害系统实现
+
+// 随机选择身体部位（根据概率权重：50:120:90:90:75:75）
+Player::BodyPart Player::selectRandomBodyPart() const {
+    // 总权重：50+120+90+90+75+75 = 500
+    static const int weights[] = {50, 120, 90, 90, 75, 75};
+    static const int totalWeight = 500;
+    
+    int random = rand() % totalWeight;
+    int currentWeight = 0;
+    
+    for (int i = 0; i < 6; i++) {
+        currentWeight += weights[i];
+        if (random < currentWeight) {
+            return static_cast<BodyPart>(i);
+        }
+    }
+    
+    // 默认返回躯干（最大权重）
+    return BodyPart::TORSO;
+}
+
+// 对特定身体部位造成伤害
+void Player::takeDamageToBodyPart(int damage, BodyPart part) {
+    if (damage <= 0) return;
+    
+    const char* partName;
+    int* partHealth;
+    
+    switch (part) {
+        case BodyPart::HEAD:
+            partName = "头部";
+            partHealth = &headHealth;
+            break;
+        case BodyPart::TORSO:
+            partName = "躯干";
+            partHealth = &torsoHealth;
+            break;
+        case BodyPart::LEFT_LEG:
+            partName = "左腿";
+            partHealth = &leftLegHealth;
+            break;
+        case BodyPart::RIGHT_LEG:
+            partName = "右腿";
+            partHealth = &rightLegHealth;
+            break;
+        case BodyPart::LEFT_ARM:
+            partName = "左臂";
+            partHealth = &leftArmHealth;
+            break;
+        case BodyPart::RIGHT_ARM:
+            partName = "右臂";
+            partHealth = &rightArmHealth;
+            break;
+        default:
+            partName = "未知部位";
+            partHealth = &torsoHealth;
+            break;
+    }
+    
+    // 减少该部位血量
+    *partHealth = std::max(0, *partHealth - damage);
+    
+    std::cout << "玩家" << partName << "受到 " << damage << " 点伤害，剩余血量: " << *partHealth << std::endl;
+    
+    // 触发受伤屏幕效果（来自Game类）
+    Game* game = Game::getInstance();
+    if (game) {
+        game->triggerHurtEffect(damage);
+    }
+    
+    // 检查是否死亡
+    if (isDeadFromBodyDamage()) {
+        health = 0;  // 设置Entity的总血量为0
+        std::cout << "玩家死亡！" << std::endl;
+    }
+}
+
+// 获取身体部位最大血量
+int Player::getMaxHealthForBodyPart(BodyPart part) {
+    switch (part) {
+        case BodyPart::HEAD:
+            return MAX_HEAD_HEALTH;
+        case BodyPart::TORSO:
+            return MAX_TORSO_HEALTH;
+        case BodyPart::LEFT_LEG:
+        case BodyPart::RIGHT_LEG:
+            return MAX_LEG_HEALTH;
+        case BodyPart::LEFT_ARM:
+        case BodyPart::RIGHT_ARM:
+            return MAX_ARM_HEALTH;
+        default:
+            return MAX_TORSO_HEALTH;
+    }
+}
+
+// 检查是否因身体部位伤害而死亡
+bool Player::isDeadFromBodyDamage() const {
+    // 头部血量为0即死亡
+    if (headHealth <= 0) {
+        return true;
+    }
+    
+    // 躯干血量为0即死亡
+    if (torsoHealth <= 0) {
+        return true;
+    }
+    
+    // 其他部位血量为0不会立即死亡，但可能影响行动能力
+    return false;
+}
+
+// 重写takeDamage方法，使用身体部位伤害系统
+bool Player::takeDamage(const Damage& damage) {
+    if (damage.isEmpty()) return false;
+    
+    int totalDamage = damage.getTotalDamage();
+    if (totalDamage <= 0) return false;
+    
+    // 闪避判定：假设攻击者敏捷为12（可以根据实际攻击者调整）
+    int attackerDexterity = 12;
+    if (damage.getSource()) {
+        // 如果有攻击来源，尝试获取其敏捷属性
+        // 这里简化处理，实际可以从Entity获取
+        attackerDexterity = 12; // 默认值
+    }
+    
+    // 尝试闪避
+    if (attemptDodge(attackerDexterity)) {
+        // 闪避成功，不受伤害
+        return false;
+    }
+    
+    // 闪避失败，正常受伤
+    // 随机选择受伤部位
+    BodyPart targetPart = selectRandomBodyPart();
+    
+    // 对该部位造成伤害
+    takeDamageToBodyPart(totalDamage, targetPart);
+    
+    // 更新Entity的总血量为所有部位血量之和
+    health = headHealth + torsoHealth + leftLegHealth + rightLegHealth + leftArmHealth + rightArmHealth;
+    
+    return true;
+}
+
+// 闪避系统实现
+
+// 尝试闪避攻击
+bool Player::attemptDodge(int attackerDexterity) {
+    // 首先检查是否还有闪避次数
+    if (dodgeCount >= getMaxDodgesPerWindow()) {
+        std::cout << "闪避次数已用完，无法闪避！当前闪避次数: " << dodgeCount << "/" << getMaxDodgesPerWindow() << std::endl;
+        return false;
+    }
+    
+    // 获取闪避技能等级
+    int dodgeLevel = getSkillLevel(SkillType::DODGE);
+    
+    // 使用随机数生成器
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> d3(1, 3); // d3骰子
+    
+    // 对方的敏捷：攻击者敏捷次d3
+    int attackerRoll = 0;
+    for (int i = 0; i < attackerDexterity; i++) {
+        attackerRoll += d3(gen);
+    }
+    
+    // 我的敏捷d3+闪避技能等级
+    int defenderRoll = d3(gen) + AGI + dodgeLevel;
+    
+    std::cout << "闪避判定: 攻击者(" << attackerDexterity << "次d3=" << attackerRoll 
+              << ") vs 防御者(" << AGI << "+" << dodgeLevel << "+d3=" << defenderRoll << ")";
+    
+    if (defenderRoll > attackerRoll) {
+        // 闪避成功
+        dodgeCount++;
+        std::cout << " -> 闪避成功！剩余闪避次数: " << (getMaxDodgesPerWindow() - dodgeCount) << "/" << getMaxDodgesPerWindow() << std::endl;
+        
+        // 获得闪避经验
+        addSkillExperience(SkillType::DODGE, 1);
+        
+        return true;
+    } else {
+        // 闪避失败
+        std::cout << " -> 闪避失败！" << std::endl;
+        return false;
+    }
+}
+
+// 更新闪避次数（每3秒重置）
+void Player::updateDodgeCount() {
+    // 获取当前时间（毫秒）
+    Uint64 currentTime = SDL_GetTicks();
+    
+    // 如果超过3秒（3000毫秒），重置闪避次数
+    if (currentTime - lastDodgeResetTime >= 3000) {
+        if (dodgeCount > 0) {
+            std::cout << "闪避次数重置：" << dodgeCount << " -> 0" << std::endl;
+        }
+        dodgeCount = 0;
+        lastDodgeResetTime = currentTime;
+    }
+}
+
+// 获取每3秒最大闪避次数
+int Player::getMaxDodgesPerWindow() const {
+    int dodgeLevel = getSkillLevel(SkillType::DODGE);
+    return dodgeLevel / 5 + 2;  // 闪避等级/5+2次
+}
+
+// 近战攻击系统实现
+
+// 执行近战攻击
+bool Player::performMeleeAttack(Creature* target) {
+    if (!target) return false;
+    
+    // 检查是否装备了近战武器
+    Item* equippedWeapon = equipmentSystem->getEquippedItem(EquipSlot::RIGHT_HAND);
+    MeleeWeapon* meleeWeapon = dynamic_cast<MeleeWeapon*>(equippedWeapon);
+    
+    if (!meleeWeapon) {
+        std::cout << "没有装备近战武器！" << std::endl;
+        return false;
+    }
+    
+    // 检查攻击范围（简化处理，假设在范围内）
+    // 实际游戏中需要检查距离
+    
+    // 获取武器攻击参数
+    AttackParams attackParams = meleeWeapon->getAttackParams();
+    
+    // 创建伤害对象用于技能计算
+    Damage weaponDamage;
+    if (attackParams.damageType == "blunt") {
+        weaponDamage.addDamage(DamageType::BLUNT, attackParams.baseDamage);
+    } else if (attackParams.damageType == "piercing") {
+        weaponDamage.addDamage(DamageType::PIERCE, attackParams.baseDamage);
+    } else if (attackParams.damageType == "slashing") {
+        weaponDamage.addDamage(DamageType::SLASH, attackParams.baseDamage);
+    } else {
+        weaponDamage.addDamage(DamageType::BLUNT, attackParams.baseDamage); // 默认钝击
+    }
+    
+    // 获取最高伤害对应的技能等级
+    int highestSkillLevel = getHighestDamageSkillLevel(weaponDamage);
+    
+    // 获取近战技能等级
+    int meleeSkillLevel = getSkillLevel(SkillType::MELEE);
+    
+    // 获取武器命中加成
+    int weaponAccuracyBonus = meleeWeapon->getWeaponAccuracyBonus();
+    
+    // 计算攻击者命中值：(最高伤害技能等级 + 0.4*近战等级) + 敏捷d3 + 武器命中加成
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> d3(1, 3);
+    
+    float skillBonus = highestSkillLevel + 0.4f * meleeSkillLevel;
+    int attackerRoll = static_cast<int>(skillBonus) + d3(gen) + AGI + weaponAccuracyBonus;
+    
+    // 计算防御者闪避值：敏捷d3 + 近战命中难度
+    int defenderRoll = d3(gen) + target->getDexterity() + target->getMeleeHitDifficulty();
+    
+    std::cout << "近战命中检定: 攻击者(" << skillBonus << "+" << AGI << "+d3+" << weaponAccuracyBonus 
+              << "=" << attackerRoll << ") vs 防御者(" << target->getDexterity() << "+" 
+              << target->getMeleeHitDifficulty() << "+d3=" << defenderRoll << ")";
+    
+    if (attackerRoll > defenderRoll) {
+        std::cout << " -> 命中！" << std::endl;
+        
+        // 目标尝试闪避
+        Player* targetPlayer = dynamic_cast<Player*>(target);
+        bool dodged = false;
+        if (targetPlayer) {
+            dodged = targetPlayer->attemptDodge(AGI);
+        }
+        
+        if (!dodged) {
+            // 闪避失败，造成伤害
+            target->takeDamage(weaponDamage);
+            
+            // 获得技能经验
+            if (skillSystem) {
+                // 根据最高伤害类型获得对应技能经验
+                SkillType primarySkill = getSkillTypeFromDamage(weaponDamage);
+                skillSystem->addExperience(primarySkill, 10);
+                skillSystem->addExperience(SkillType::MELEE, 5);
+            }
+            
+            return true;
+        } else {
+            std::cout << "目标闪避成功！" << std::endl;
+        }
+    } else {
+        std::cout << " -> 未命中！" << std::endl;
+        
+        // 显示miss飘字
+        Game* game = Game::getInstance();
+        if (game) {
+            game->addDamageNumber(target->getX(), target->getY() - target->getRadius(), DamageNumberType::MISS);
+        }
+    }
+    
+    return false;
+}
+
+// 获取最高伤害对应的技能等级
+int Player::getHighestDamageSkillLevel(const Damage& damage) const {
+    if (!skillSystem) return 0;
+    
+    int maxDamage = 0;
+    SkillType correspondingSkill = SkillType::MELEE;
+    
+    // 检查各种伤害类型
+    for (const auto& damageInfo : damage.getDamageList()) {
+        std::string damageTypeStr = std::get<0>(damageInfo);
+        int damageValue = std::get<1>(damageInfo);
+        DamageType damageType = stringToDamageType(damageTypeStr);
+        
+        if (damageValue > maxDamage) {
+            maxDamage = damageValue;
+            
+            // 根据伤害类型确定对应技能
+            switch (damageType) {
+                case DamageType::BLUNT:
+                    correspondingSkill = SkillType::BLUNT;
+                    break;
+                case DamageType::PIERCE:
+                    correspondingSkill = SkillType::PIERCING;
+                    break;
+                case DamageType::SLASH:
+                    correspondingSkill = SkillType::SLASHING;
+                    break;
+                default:
+                    correspondingSkill = SkillType::MELEE;
+                    break;
+            }
+        }
+    }
+    
+    return skillSystem->getSkillLevel(correspondingSkill);
+}
+
+// 根据伤害类型获取对应的技能类型
+SkillType Player::getSkillTypeFromDamage(const Damage& damage) const {
+    int maxDamage = 0;
+    SkillType correspondingSkill = SkillType::MELEE;
+    
+    for (const auto& damageInfo : damage.getDamageList()) {
+        std::string damageTypeStr = std::get<0>(damageInfo);
+        int damageValue = std::get<1>(damageInfo);
+        DamageType damageType = stringToDamageType(damageTypeStr);
+        
+        if (damageValue > maxDamage) {
+            maxDamage = damageValue;
+            
+            switch (damageType) {
+                case DamageType::BLUNT:
+                    correspondingSkill = SkillType::BLUNT;
+                    break;
+                case DamageType::PIERCE:
+                    correspondingSkill = SkillType::PIERCING;
+                    break;
+                case DamageType::SLASH:
+                    correspondingSkill = SkillType::SLASHING;
+                    break;
+                default:
+                    correspondingSkill = SkillType::MELEE;
+                    break;
+            }
+        }
+    }
+    
+    return correspondingSkill;
 }
