@@ -64,11 +64,14 @@ void DamageNumber::setupColorAndText() {
             break;
             
         case DamageNumberType::MISS:
-            // 未命中：蓝色
-            color = {100, 150, 255, 255};
-            maxLifeTime = 1.5f; // miss显示时间稍短
+            // 未命中：醒目的白色
+            color = {255, 255, 255, 255};
+            maxLifeTime = 2.0f; // miss显示时间延长
             lifeTime = maxLifeTime;
             text = "MISS";
+            // 增大初始速度，让miss更明显
+            velocityY *= 1.2f;
+            velocityX *= 1.2f;
             break;
     }
 }
@@ -185,6 +188,38 @@ void DamageNumber::render(SDL_Renderer* renderer, float cameraX, float cameraY) 
         destRect.h *= scale;
         destRect.x -= (destRect.w - textWidth) / 2;
         destRect.y -= (destRect.h - textHeight) / 2;
+    }
+    
+    // 如果是MISS，也放大文字并添加描边效果
+    if (type == DamageNumberType::MISS) {
+        float scale = 1.3f; // MISS放大
+        destRect.w *= scale;
+        destRect.h *= scale;
+        destRect.x -= (destRect.w - textWidth) / 2;
+        destRect.y -= (destRect.h - textHeight) / 2;
+        
+        // 渲染黑色描边（创建描边效果）
+        SDL_Color blackColor = {0, 0, 0, renderColor.a};
+        SDL_Surface* blackSurface = TTF_RenderText_Blended(font, text.c_str(), 0, blackColor);
+        if (blackSurface) {
+            SDL_Texture* blackTexture = SDL_CreateTextureFromSurface(renderer, blackSurface);
+            if (blackTexture) {
+                SDL_SetTextureAlphaMod(blackTexture, renderColor.a);
+                
+                // 渲染8个方向的描边
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        if (dx == 0 && dy == 0) continue; // 跳过中心
+                        SDL_FRect outlineRect = destRect;
+                        outlineRect.x += dx * 2;
+                        outlineRect.y += dy * 2;
+                        SDL_RenderTexture(renderer, blackTexture, nullptr, &outlineRect);
+                    }
+                }
+                SDL_DestroyTexture(blackTexture);
+            }
+            SDL_DestroySurface(blackSurface);
+        }
     }
     
     // 渲染文本

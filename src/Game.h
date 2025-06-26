@@ -238,6 +238,12 @@ public:
     void triggerHurtEffect(float intensity = 0.8f);
     void updateHurtEffect();
     void renderHurtEffect();
+    
+    // 测试覆盖率系统
+    void testCoverageSystem();
+    
+    // 测试背包中的弹药
+    void testAmmoInInventory();
 };
 
 #endif // GAME_H

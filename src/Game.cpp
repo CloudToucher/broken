@@ -629,6 +629,18 @@ void Game::handleEvents() {
                     gameUI->testStorageSelectionDialog();
                 }
                 break;
+            case SDLK_F6: // F6键测试miss显示
+                if (player) {
+                    addDamageNumber(player->getX(), player->getY() - 50, DamageNumberType::MISS);
+                    std::cout << "测试miss显示已触发" << std::endl;
+                }
+                break;
+            case SDLK_F7: // F7键测试覆盖率系统
+                testCoverageSystem();
+                break;
+            case SDLK_F8: // F8键测试背包弹药
+                testAmmoInInventory();
+                break;
             case SDLK_TAB: // Tab键切换背包界面
                 togglePlayerUI();
                 break;
@@ -1351,10 +1363,49 @@ void Game::spawnItemsFromCluster(const std::shared_ptr<ItemSpawnCluster>& cluste
 
     // 通过ItemLoader创建实际的物品并添加到玩家背包
     for (const auto& itemName : itemNames) {
-        std::unique_ptr<Item> item = ItemLoader::getInstance()->createItem(itemName);
+        std::unique_ptr<Item> item = nullptr;
+        
+        // 尝试不同的创建方法，优先使用专门的方法
+        if (ItemLoader::getInstance()->hasAmmoTemplate(itemName)) {
+            // 如果是弹药，使用createAmmo方法
+            auto ammo = ItemLoader::getInstance()->createAmmo(itemName);
+            if (ammo) {
+                item = std::move(ammo);
+            }
+        } else if (ItemLoader::getInstance()->hasGunTemplate(itemName)) {
+            // 如果是枪械，使用createGun方法
+            auto gun = ItemLoader::getInstance()->createGun(itemName);
+            if (gun) {
+                item = std::move(gun);
+            }
+        } else if (ItemLoader::getInstance()->hasMagazineTemplate(itemName)) {
+            // 如果是弹匣，使用createMagazine方法
+            auto magazine = ItemLoader::getInstance()->createMagazine(itemName);
+            if (magazine) {
+                item = std::move(magazine);
+            }
+        } else if (ItemLoader::getInstance()->hasGunModTemplate(itemName)) {
+            // 如果是枪械配件，使用createGunMod方法
+            auto gunMod = ItemLoader::getInstance()->createGunMod(itemName);
+            if (gunMod) {
+                item = std::move(gunMod);
+            }
+        } else if (ItemLoader::getInstance()->hasWeaponTemplate(itemName)) {
+            // 如果是武器，使用createWeapon方法
+            auto weapon = ItemLoader::getInstance()->createWeapon(itemName);
+            if (weapon) {
+                item = std::move(weapon);
+            }
+        } else {
+            // 使用通用的createItem方法作为备选
+            item = ItemLoader::getInstance()->createItem(itemName);
+        }
+        
         if (item && player) {
             // 将物品添加到玩家的存储空间中
             player->addItem(std::move(item));
+        } else {
+            std::cout << "警告：无法创建物品 " << itemName << std::endl;
         }
     }
 }
@@ -2041,4 +2092,143 @@ void Game::renderHurtEffect() {
     
     // 恢复默认混合模式
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+// 测试覆盖率系统
+void Game::testCoverageSystem() {
+    std::cout << "\n=== 装备覆盖率系统测试 ===" << std::endl;
+    
+    // 获取ItemLoader实例
+    ItemLoader* loader = ItemLoader::getInstance();
+    if (!loader) {
+        std::cout << "错误：无法获取ItemLoader实例" << std::endl;
+        return;
+    }
+    
+    // 测试物品列表
+    std::vector<std::string> testItems = {
+        "连体作战服",
+        "防弹衣", 
+        "战术头盔"
+    };
+    
+    for (const auto& itemName : testItems) {
+        std::cout << "\n--- 测试物品: " << itemName << " ---" << std::endl;
+        
+        // 创建物品
+        auto item = loader->createItem(itemName);
+        if (!item) {
+            std::cout << "错误：无法创建物品 " << itemName << std::endl;
+            continue;
+        }
+        
+        // 显示基本信息
+        std::cout << "物品名称: " << item->getName() << std::endl;
+        std::cout << "是否可穿戴: " << (item->hasFlag(ItemFlag::WEARABLE) ? "是" : "否") << std::endl;
+        
+        // 显示传统装备槽位
+        const auto& equipSlots = item->getEquipSlots();
+        std::cout << "传统装备槽位数量: " << equipSlots.size() << std::endl;
+        for (const auto& slot : equipSlots) {
+            std::cout << "  - 槽位: " << static_cast<int>(slot) << std::endl;
+        }
+        
+        // 显示覆盖率信息
+        const auto& coverageSlots = item->getCoverageSlots();
+        std::cout << "覆盖率槽位数量: " << coverageSlots.size() << std::endl;
+        
+        if (!coverageSlots.empty()) {
+            std::cout << "覆盖率详情:" << std::endl;
+            for (const auto& coverage : coverageSlots) {
+                std::string slotName;
+                switch (coverage.slot) {
+                    case EquipSlot::HEAD: slotName = "头部"; break;
+                    case EquipSlot::CHEST: slotName = "胸部"; break;
+                    case EquipSlot::ABDOMEN: slotName = "腹部"; break;
+                    case EquipSlot::LEFT_LEG: slotName = "左腿"; break;
+                    case EquipSlot::RIGHT_LEG: slotName = "右腿"; break;
+                    case EquipSlot::LEFT_ARM: slotName = "左臂"; break;
+                    case EquipSlot::RIGHT_ARM: slotName = "右臂"; break;
+                    default: slotName = "其他"; break;
+                }
+                std::cout << "  - " << slotName << ": " << coverage.coverage << "%" << std::endl;
+            }
+        } else {
+            std::cout << "  无覆盖率信息" << std::endl;
+        }
+        
+        // 测试覆盖率查询
+        std::vector<EquipSlot> testSlots = {
+            EquipSlot::HEAD, EquipSlot::CHEST, EquipSlot::ABDOMEN,
+            EquipSlot::LEFT_LEG, EquipSlot::RIGHT_LEG
+        };
+        
+        std::cout << "覆盖率查询测试:" << std::endl;
+        for (const auto& slot : testSlots) {
+            int coverage = item->getCoverage(slot);
+            std::string slotName;
+            switch (slot) {
+                case EquipSlot::HEAD: slotName = "头部"; break;
+                case EquipSlot::CHEST: slotName = "胸部"; break;
+                case EquipSlot::ABDOMEN: slotName = "腹部"; break;
+                case EquipSlot::LEFT_LEG: slotName = "左腿"; break;
+                case EquipSlot::RIGHT_LEG: slotName = "右腿"; break;
+                default: slotName = "其他"; break;
+            }
+            std::cout << "  " << slotName << " 覆盖率: " << coverage << "%" << std::endl;
+        }
+    }
+    
+    std::cout << "\n=== 测试完成 ===" << std::endl;
+}
+
+// 添加一个新的测试方法来验证背包中的弹药
+void Game::testAmmoInInventory() {
+    std::cout << "\n=== 背包弹药测试 ===" << std::endl;
+    
+    if (!player) {
+        std::cout << "错误：玩家不存在" << std::endl;
+        return;
+    }
+    
+    // 获取玩家的所有存储空间
+    auto storages = player->getAllAvailableStorages();
+    if (storages.empty()) {
+        std::cout << "错误：玩家没有任何存储空间" << std::endl;
+        return;
+    }
+    
+    std::cout << "检查玩家的所有存储空间..." << std::endl;
+    std::cout << "玩家共有 " << storages.size() << " 个存储空间" << std::endl;
+    
+    int ammoCount = 0;
+    int totalItemCount = 0;
+    
+    for (const auto& [slot, storage] : storages) {
+        std::cout << "\n检查存储空间: " << storage->getName() << std::endl;
+        size_t itemCount = storage->getItemCount();
+        totalItemCount += itemCount;
+        std::cout << "  物品数量: " << itemCount << std::endl;
+        
+        for (size_t i = 0; i < itemCount; ++i) {
+            Item* item = storage->getItem(i);
+            if (item && item->hasFlag(ItemFlag::AMMO)) {
+                ammoCount++;
+                std::cout << "\n发现弹药: " << item->getName() << std::endl;
+                
+                // 尝试转换为Ammo类型
+                Ammo* ammo = dynamic_cast<Ammo*>(item);
+                if (ammo) {
+                    std::cout << "  转换成功 - 类型: " << ammo->getAmmoType() << std::endl;
+                    std::cout << "  伤害: " << ammo->getBaseDamage() << std::endl;
+                    std::cout << "  穿透力: " << ammo->getBasePenetration() << std::endl;
+                } else {
+                    std::cout << "  转换失败 - 物品标记为弹药但无法转换为Ammo类型" << std::endl;
+                }
+            }
+        }
+    }
+    
+    std::cout << "\n总共检查了 " << totalItemCount << " 个物品，找到 " << ammoCount << " 个弹药物品" << std::endl;
+    std::cout << "=== 弹药测试完成 ===" << std::endl;
 }

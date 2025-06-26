@@ -100,6 +100,12 @@ private:
     // 辅助方法：从JSON加载装备槽位
     void loadEquipSlots(Item* item, const json& slotsJson);
     
+    // 辅助方法：从JSON加载覆盖率信息
+    void loadCoverageSlots(Item* item, const json& coverageJson);
+    
+    // 辅助方法：将字符串转换为EquipSlot枚举
+    EquipSlot stringToEquipSlot(const std::string& slotStr);
+    
     // 辅助方法：从JSON加载攻击模式配置
     void loadAttackModes(MeleeWeapon* weapon, const json& attackModesJson);
     

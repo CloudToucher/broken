@@ -40,6 +40,15 @@ enum class EquipSlot {
     BACK,           // 背部
 };
 
+// 装备覆盖率结构体
+struct EquipSlotCoverage {
+    EquipSlot slot;         // 覆盖的部位
+    int coverage;           // 覆盖率（0-100）
+    
+    EquipSlotCoverage(EquipSlot s = EquipSlot::NONE, int c = 0) 
+        : slot(s), coverage(c) {}
+};
+
 class Item {
 protected:
     std::string name;                      // 物品名称
@@ -48,7 +57,8 @@ protected:
     float length;                          // 长度（厘米）
     int value;                             // 物品价值（金币）
     bool wearable;                         // 是否可穿戴
-    std::vector<EquipSlot> equipSlots;     // 物品可以覆盖的槽位（可以有多个）
+    std::vector<EquipSlot> equipSlots;     // 物品可以覆盖的槽位（向后兼容，已弃用）
+    std::vector<EquipSlotCoverage> coverageSlots; // 物品覆盖的槽位及覆盖率
     ItemRarity rarity;                     // 物品稀有度
     
     // 物品标签集合（用于替代物品类别）
@@ -160,10 +170,21 @@ public:
     
     // 类别相关方法已通过ItemFlag实现
     
-    // 槽位相关方法
+    // 槽位相关方法（向后兼容，已弃用）
     void addEquipSlot(EquipSlot slot);
     bool canEquipToSlot(EquipSlot slot) const;
     void removeEquipSlot(EquipSlot slot);
+    
+    // 新的覆盖率相关方法
+    void addCoverageSlot(EquipSlot slot, int coverage = 100);
+    void setCoverageSlot(EquipSlot slot, int coverage);
+    int getCoverage(EquipSlot slot) const;
+    bool hasSlotCoverage(EquipSlot slot) const;
+    void removeCoverageSlot(EquipSlot slot);
+    const std::vector<EquipSlotCoverage>& getCoverageSlots() const { return coverageSlots; }
+    
+    // 获取所有覆盖的槽位（不包含覆盖率信息，向后兼容）
+    std::vector<EquipSlot> getAllCoveredSlots() const;
     
     // 存储空间相关方法
     void addStorage(std::unique_ptr<Storage> storage);

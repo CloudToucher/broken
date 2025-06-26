@@ -51,6 +51,7 @@ Item::Item(const Item& other)
       value(other.value),
       wearable(other.wearable),
       equipSlots(other.equipSlots),
+      coverageSlots(other.coverageSlots),
       rarity(other.rarity),
       flags(other.flags),
       description(other.description),
@@ -88,6 +89,7 @@ Item& Item::operator=(const Item& other) {
         value = other.value;
         wearable = other.wearable;
         equipSlots = other.equipSlots;
+        coverageSlots = other.coverageSlots;
         rarity = other.rarity;
         flags = other.flags;
         description = other.description;
@@ -315,4 +317,90 @@ std::vector<std::string> Item::getFlagNames() const {
         names.push_back(GetItemFlagName(flag));
     }
     return names;
+}
+
+// 新的覆盖率相关方法实现
+void Item::addCoverageSlot(EquipSlot slot, int coverage) {
+    // 确保覆盖率在0-100范围内
+    coverage = std::max(0, std::min(100, coverage));
+    
+    // 检查是否已存在该槽位
+    for (auto& slotCoverage : coverageSlots) {
+        if (slotCoverage.slot == slot) {
+            slotCoverage.coverage = coverage;
+            return;
+        }
+    }
+    
+    // 添加新的槽位覆盖
+    coverageSlots.emplace_back(slot, coverage);
+    
+    // 自动设置为可穿戴
+    wearable = true;
+    
+    // 为了向后兼容，也添加到equipSlots中
+    if (std::find(equipSlots.begin(), equipSlots.end(), slot) == equipSlots.end()) {
+        equipSlots.push_back(slot);
+    }
+}
+
+void Item::setCoverageSlot(EquipSlot slot, int coverage) {
+    // 确保覆盖率在0-100范围内
+    coverage = std::max(0, std::min(100, coverage));
+    
+    for (auto& slotCoverage : coverageSlots) {
+        if (slotCoverage.slot == slot) {
+            slotCoverage.coverage = coverage;
+            return;
+        }
+    }
+    
+    // 如果槽位不存在，添加它
+    addCoverageSlot(slot, coverage);
+}
+
+int Item::getCoverage(EquipSlot slot) const {
+    for (const auto& slotCoverage : coverageSlots) {
+        if (slotCoverage.slot == slot) {
+            return slotCoverage.coverage;
+        }
+    }
+    return 0; // 不覆盖该槽位
+}
+
+bool Item::hasSlotCoverage(EquipSlot slot) const {
+    for (const auto& slotCoverage : coverageSlots) {
+        if (slotCoverage.slot == slot) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Item::removeCoverageSlot(EquipSlot slot) {
+    // 从覆盖率列表中移除
+    auto it = std::remove_if(coverageSlots.begin(), coverageSlots.end(),
+        [slot](const EquipSlotCoverage& coverage) {
+            return coverage.slot == slot;
+        });
+    coverageSlots.erase(it, coverageSlots.end());
+    
+    // 为了向后兼容，也从equipSlots中移除
+    auto equipIt = std::find(equipSlots.begin(), equipSlots.end(), slot);
+    if (equipIt != equipSlots.end()) {
+        equipSlots.erase(equipIt);
+    }
+    
+    // 如果没有覆盖任何槽位，设置为不可穿戴
+    if (coverageSlots.empty() && equipSlots.empty()) {
+        wearable = false;
+    }
+}
+
+std::vector<EquipSlot> Item::getAllCoveredSlots() const {
+    std::vector<EquipSlot> slots;
+    for (const auto& coverage : coverageSlots) {
+        slots.push_back(coverage.slot);
+    }
+    return slots;
 }

@@ -4,7 +4,11 @@
 #include "Item.h"
 #include "Gun.h"
 #include "GunMod.h"
+#include "MeleeWeapon.h"
+#include "Ammo.h"
+#include "Magazine.h"
 #include "storage.h"
+#include "AttackSystem.h"
 #include <iostream>
 #include <sstream>
 #include <set>
@@ -455,8 +459,8 @@ void GameUI::updatePlayerUI(Player* player) {
         float fontSizeRatio = 1.3f; // TEXT类型的字体大小比例
         float targetButtonX = currentWindow->getWidth() - 40.0f; // 目标位置
         float buttonX = targetButtonX / fontSizeRatio; // 补偿缩放效果
-        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "折叠按钮位置: 窗体宽度=%.1f, 目标X=%.1f, 补偿后X=%.1f, 比例=%.1f", 
-                   currentWindow->getWidth(), targetButtonX, buttonX, fontSizeRatio);
+        //SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "折叠按钮位置: 窗体宽度=%.1f, 目标X=%.1f, 补偿后X=%.1f, 比例=%.1f", 
+        //           currentWindow->getWidth(), targetButtonX, buttonX, fontSizeRatio);
         UIElement collapseButton(storage->getIsCollapsed() ? "+" : "-", buttonX, 0.0f, 
                                 storage->getIsCollapsed() ? SDL_Color{255, 150, 150, 255} : SDL_Color{200, 200, 200, 255},
                                 UIElementType::TEXT);
@@ -907,27 +911,151 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
     }
     details.push_back(namePrefix + item->getName());
     
-    // 添加物品类别信息
-    std::string categoryStr = "类别: ";
-    const auto& flagNames = item->getFlagNames();
-    for (size_t i = 0; i < flagNames.size(); ++i) {
-        if (i > 0) categoryStr += ", ";
-        categoryStr += flagNames[i];
+    // 添加物品类别信息（只显示重要的类别标签）
+    std::vector<std::string> importantCategories;
+    if (item->hasFlag(ItemFlag::WEAPON)) importantCategories.push_back("武器");
+    if (item->hasFlag(ItemFlag::ARMOR)) importantCategories.push_back("护甲");
+    if (item->hasFlag(ItemFlag::AMMO)) importantCategories.push_back("弹药");
+    if (item->hasFlag(ItemFlag::CONTAINER)) importantCategories.push_back("容器");
+    if (item->hasFlag(ItemFlag::MEDICAL)) importantCategories.push_back("医疗");
+    if (item->hasFlag(ItemFlag::FOOD)) importantCategories.push_back("食物");
+    if (item->hasFlag(ItemFlag::TOOL)) importantCategories.push_back("工具");
+    if (item->hasFlag(ItemFlag::MISC)) importantCategories.push_back("杂项");
+    
+    if (!importantCategories.empty()) {
+        std::string categoryStr = "类别: ";
+        for (size_t i = 0; i < importantCategories.size(); ++i) {
+            if (i > 0) categoryStr += ", ";
+            categoryStr += importantCategories[i];
+        }
+        details.push_back(categoryStr);
     }
-    details.push_back(categoryStr);
     
     // 添加物品基本属性
     details.push_back("重量: " + formatFloat(item->getWeight()) + " kg");
-    details.push_back("体积: " + formatFloat(item->getVolume()));
-    details.push_back("价值: " + std::to_string(item->getValue()));
+    details.push_back("体积: " + formatFloat(item->getVolume()) + " L");
+    details.push_back("价值: " + std::to_string(item->getValue()) + " $");
     
-    //// 添加物品描述
-    //if (!item->getDescription().empty()) {
-    //    details.push_back(""); // 空行
-    //    details.push_back(item->getDescription());
-    //}
+    // 如果是可穿戴物品，显示覆盖部位和覆盖率
+    if (item->hasFlag(ItemFlag::WEARABLE)) {
+        details.push_back(""); // 空行
+        details.push_back("可穿戴属性:");
+        
+        // 显示覆盖率信息
+        auto coverageSlots = item->getCoverageSlots();
+        if (!coverageSlots.empty()) {
+            details.push_back("覆盖部位:");
+            for (const auto& coverage : coverageSlots) {
+                std::string slotName;
+                switch (coverage.slot) {
+                    case EquipSlot::HEAD: slotName = "头部"; break;
+                    case EquipSlot::CHEST: slotName = "胸部"; break;
+                    case EquipSlot::ABDOMEN: slotName = "腹部"; break;
+                    case EquipSlot::LEFT_LEG: slotName = "左腿"; break;
+                    case EquipSlot::RIGHT_LEG: slotName = "右腿"; break;
+                    case EquipSlot::LEFT_FOOT: slotName = "左脚"; break;
+                    case EquipSlot::RIGHT_FOOT: slotName = "右脚"; break;
+                    case EquipSlot::LEFT_ARM: slotName = "左臂"; break;
+                    case EquipSlot::RIGHT_ARM: slotName = "右臂"; break;
+                    case EquipSlot::LEFT_HAND: slotName = "左手"; break;
+                    case EquipSlot::RIGHT_HAND: slotName = "右手"; break;
+                    case EquipSlot::BACK: slotName = "背部"; break;
+                    default: slotName = "未知"; break;
+                }
+                details.push_back("- " + slotName + ": " + std::to_string(coverage.coverage) + "%");
+            }
+        } else {
+            // 如果没有覆盖率信息，显示传统的装备槽位
+            const auto& equipSlots = item->getEquipSlots();
+            if (!equipSlots.empty()) {
+                details.push_back("装备槽位:");
+                for (const auto& slot : equipSlots) {
+                    std::string slotName;
+                    switch (slot) {
+                        case EquipSlot::HEAD: slotName = "头部"; break;
+                        case EquipSlot::CHEST: slotName = "胸部"; break;
+                        case EquipSlot::ABDOMEN: slotName = "腹部"; break;
+                        case EquipSlot::LEFT_LEG: slotName = "左腿"; break;
+                        case EquipSlot::RIGHT_LEG: slotName = "右腿"; break;
+                        case EquipSlot::LEFT_FOOT: slotName = "左脚"; break;
+                        case EquipSlot::RIGHT_FOOT: slotName = "右脚"; break;
+                        case EquipSlot::LEFT_ARM: slotName = "左臂"; break;
+                        case EquipSlot::RIGHT_ARM: slotName = "右臂"; break;
+                        case EquipSlot::LEFT_HAND: slotName = "左手"; break;
+                        case EquipSlot::RIGHT_HAND: slotName = "右手"; break;
+                        case EquipSlot::BACK: slotName = "背部"; break;
+                        default: slotName = "未知"; break;
+                    }
+                    details.push_back("- " + slotName);
+                }
+            }
+        }
+    }
     
-    // 根据物品类型添加特定信息
+    // 如果有存储空间，显示存储信息
+    if (item->hasFlag(ItemFlag::CONTAINER) && item->getStorageCount() > 0) {
+        details.push_back(""); // 空行
+        details.push_back("存储空间:");
+        
+        for (size_t i = 0; i < item->getStorageCount(); ++i) {
+            Storage* storage = item->getStorage(i);
+            if (storage) {
+                std::string storageInfo = "- " + storage->getName() + ":";
+                details.push_back(storageInfo);
+                
+                // 重量信息
+                details.push_back("  重量: " + formatFloat(storage->getCurrentWeight()) + "/" + 
+                                formatFloat(storage->getMaxWeight()) + " kg");
+                
+                // 体积信息
+                details.push_back("  体积: " + formatFloat(storage->getCurrentVolume()) + "/" + 
+                                formatFloat(storage->getMaxVolume()) + " L");
+                
+                // 长度信息
+                details.push_back("  最大长度: " + formatFloat(storage->getMaxLength()) + " cm");
+                
+                // 物品数量信息
+                if (storage->getMaxItems() != -1) {
+                    details.push_back("  物品数量: " + std::to_string(storage->getItemCount()) + "/" + 
+                                    std::to_string(storage->getMaxItems()) + " 件");
+                } else {
+                    details.push_back("  物品数量: " + std::to_string(storage->getItemCount()) + " 件");
+                }
+                
+                // 存取时间信息
+                details.push_back("  存取时间: " + formatFloat(storage->getAccessTime()) + " 秒");
+            }
+        }
+    }
+    
+    // 如果是弹药，显示弹药属性
+    if (item->hasFlag(ItemFlag::AMMO)) {
+        Ammo* ammo = dynamic_cast<Ammo*>(item);
+        details.push_back(""); // 空行
+        details.push_back("弹药属性:");
+        if (ammo) {
+            details.push_back("口径: " + ammo->getAmmoType());
+            details.push_back("伤害: " + std::to_string(ammo->getBaseDamage()));
+            details.push_back("穿透力: " + formatFloat(ammo->getBasePenetration()));
+            details.push_back("射程: " + formatFloat(ammo->getBaseRange()) + " m");
+            details.push_back("速度: " + formatFloat(ammo->getBaseSpeed()) + " m/s");
+            
+            // 显示特殊影响属性
+            if (ammo->getModRecoil() != 0.0f) {
+                details.push_back("后坐力修正: " + formatFloat(ammo->getModRecoil() * 100) + "%");
+            }
+            if (ammo->getModAccuracyMOA() != 0.0f) {
+                details.push_back("精度修正: " + formatFloat(ammo->getModAccuracyMOA()) + " MOA");
+            }
+            if (ammo->getModErgonomics() != 0.0f) {
+                details.push_back("人体工程学修正: " + formatFloat(ammo->getModErgonomics()));
+            }
+        } else {
+            details.push_back("警告: 物品标记为弹药但无法转换为Ammo类型");
+        }
+    }
+    
+    // 如果是武器，显示武器属性
     if (item->hasFlag(ItemFlag::WEAPON)) {
         details.push_back(""); // 空行
         details.push_back("武器属性:");
@@ -937,9 +1065,9 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
             Gun* gun = dynamic_cast<Gun*>(item);
             if (gun) {
                 details.push_back("伤害加成: " + std::to_string(gun->getDamageBonus()));
-                details.push_back("射程加成: " + std::to_string(gun->getRangeBonus()) );
+                details.push_back("射程加成: " + std::to_string(gun->getRangeBonus()) + " cm");
                 details.push_back("精度: " + formatFloat(gun->getAccuracyMOA()) + " MOA");
-                details.push_back("射速加成: " + std::to_string(gun->getFireRate()) + " RPM");
+                details.push_back("射速: " + std::to_string(gun->getFireRate()) + " RPM");
                 details.push_back("穿透加成: " + formatFloat(gun->getPenetrationBonus()));
                 
                 // 添加弹匣信息
@@ -977,54 +1105,151 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
             } else {
                 details.push_back("警告: 物品标记为枪械但无法转换为Gun类型");
             }
+        } 
+        // 如果是近战武器，添加近战武器特定属性
+        else if (item->hasFlag(ItemFlag::MELEE)) {
+            MeleeWeapon* melee = dynamic_cast<MeleeWeapon*>(item);
+            if (melee) {
+                // 获取主攻击和副攻击的参数
+                AttackParams primaryAttack = melee->getAttackParams(WeaponAttackType::PRIMARY);
+                AttackParams secondaryAttack = melee->getAttackParams(WeaponAttackType::SECONDARY);
+                
+                details.push_back("基础伤害: " + std::to_string(primaryAttack.baseDamage));
+                details.push_back("攻击范围: " + formatFloat(primaryAttack.range) + " 像素");
+                details.push_back("攻击速度: " + formatFloat(primaryAttack.speed) + " 次/秒");
+                details.push_back("暴击率: " + formatFloat(primaryAttack.criticalChance * 100) + "%");
+                details.push_back("暴击倍数: " + formatFloat(primaryAttack.criticalMultiplier) + "x");
+                details.push_back("护甲穿透: " + std::to_string(primaryAttack.armorPenetration));
+                
+                // 显示攻击方式
+                details.push_back("攻击方式:");
+                
+                // 主攻击方式
+                std::string primaryDesc = "- 主攻击: ";
+                if (primaryAttack.shape == AttackShape::SECTOR) {
+                    primaryDesc += "扇形攻击";
+                } else if (primaryAttack.shape == AttackShape::RECTANGLE) {
+                    primaryDesc += "直线攻击";
+                } else if (primaryAttack.shape == AttackShape::CIRCLE) {
+                    primaryDesc += "圆形攻击";
+                }
+                primaryDesc += " (" + primaryAttack.damageType + "伤害)";
+                details.push_back(primaryDesc);
+                
+                // 副攻击方式（如果有）
+                if (secondaryAttack.baseDamage > 0) {
+                    std::string secondaryDesc = "- 副攻击: ";
+                    if (secondaryAttack.shape == AttackShape::SECTOR) {
+                        secondaryDesc += "扇形攻击";
+                    } else if (secondaryAttack.shape == AttackShape::RECTANGLE) {
+                        secondaryDesc += "直线攻击";
+                    } else if (secondaryAttack.shape == AttackShape::CIRCLE) {
+                        secondaryDesc += "圆形攻击";
+                    }
+                    secondaryDesc += " (" + secondaryAttack.damageType + "伤害)";
+                    if (secondaryAttack.baseDamage != primaryAttack.baseDamage) {
+                        secondaryDesc += " [" + std::to_string(secondaryAttack.baseDamage) + "伤害]";
+                    }
+                    details.push_back(secondaryDesc);
+                }
+                
+                // 显示特殊效果
+                bool hasEffects = false;
+                details.push_back("特殊效果:");
+                
+                if (primaryAttack.canBleed && primaryAttack.bleedChance > 0) {
+                    details.push_back("- 流血概率: " + formatFloat(primaryAttack.bleedChance * 100) + "%");
+                    hasEffects = true;
+                }
+                if (primaryAttack.canStun && primaryAttack.stunChance > 0) {
+                    details.push_back("- 眩晕概率: " + formatFloat(primaryAttack.stunChance * 100) + "%");
+                    hasEffects = true;
+                }
+                if (primaryAttack.canPoison && primaryAttack.poisonChance > 0) {
+                    details.push_back("- 中毒概率: " + formatFloat(primaryAttack.poisonChance * 100) + "%");
+                    hasEffects = true;
+                }
+                if (primaryAttack.canKnockback && primaryAttack.knockbackChance > 0) {
+                    details.push_back("- 击退概率: " + formatFloat(primaryAttack.knockbackChance * 100) + "%");
+                    hasEffects = true;
+                }
+                
+                if (!hasEffects) {
+                    details.push_back("- 无");
+                }
+                
+                // 显示当前连击层数
+                if (melee->getComboCount() > 0) {
+                    details.push_back("当前连击: " + std::to_string(melee->getComboCount()) + " 层");
+                }
+            } else {
+                details.push_back("警告: 物品标记为近战武器但无法转换为MeleeWeapon类型");
+            }
         }
-        // 可以添加其他武器类型的特定属性
     }
-    else if (item->hasFlag(ItemFlag::MAGAZINE)) {
-        Magazine* mag = dynamic_cast<Magazine*>(item);
+    
+    // 如果是弹匣，显示弹匣属性
+    if (item->hasFlag(ItemFlag::MAGAZINE)) {
+        Magazine* magazine = dynamic_cast<Magazine*>(item);
         details.push_back(""); // 空行
         details.push_back("弹匣属性:");
-        if (mag) {
-            details.push_back("容量: " + std::to_string(mag->getCapacity()));
-            details.push_back("当前弹药: " + std::to_string(mag->getCurrentAmmoCount()));
-            // 将vector<string>转换为格式化的字符串
-            std::string ammoTypes;
-            const auto& types = mag->getCompatibleAmmoTypes();
-            for (size_t i = 0; i < types.size(); ++i) {
-                ammoTypes += types[i];
-                if (i < types.size() - 1) {
-                    ammoTypes += ", ";
+        if (magazine) {
+            details.push_back("容量: " + std::to_string(magazine->getCurrentAmmoCount()) + "/" + 
+                            std::to_string(magazine->getCapacity()) + " 发");
+            
+            // 显示兼容口径
+            const auto& compatibleTypes = magazine->getCompatibleAmmoTypes();
+            if (!compatibleTypes.empty()) {
+                details.push_back("兼容口径:");
+                for (const auto& type : compatibleTypes) {
+                    details.push_back("- " + type);
                 }
             }
-            details.push_back("兼容口径: " + ammoTypes);
+            
+            details.push_back("装填时间: " + formatFloat(magazine->getReloadTime()) + " 秒");
+            details.push_back("卸载时间: " + formatFloat(magazine->getUnloadTime()) + " 秒");
         } else {
             details.push_back("警告: 物品标记为弹匣但无法转换为Magazine类型");
         }
     }
-    else if (item->hasFlag(ItemFlag::AMMO)) {
-        Ammo* ammo = dynamic_cast<Ammo*>(item);
-        details.push_back(""); // 空行
-        details.push_back("弹药属性:");
-        if (ammo) {
-            details.push_back("口径: " + ammo->getAmmoType());
-            details.push_back("伤害修正: " + formatFloat(ammo->getBaseDamage() * 100) + "%");
-            details.push_back("穿透修正: " + formatFloat(ammo->getBasePenetration() * 100) + "%");
-        } else {
-            details.push_back("警告: 物品标记为弹药但无法转换为Ammo类型");
-        }
-    }
-    else if (item->hasFlag(ItemFlag::GUNMOD)) {
-        GunMod* mod = dynamic_cast<GunMod*>(item);
+    
+    // 如果是枪械配件，显示配件属性
+    if (item->hasFlag(ItemFlag::GUNMOD)) {
+        GunMod* gunMod = dynamic_cast<GunMod*>(item);
         details.push_back(""); // 空行
         details.push_back("配件属性:");
-        if (mod) {
-            if (mod->getModDamageBonus() != 0) details.push_back("伤害修正: " + formatFloat(mod->getModDamageBonus()));
-            if (mod->getModRangeBonus() != 0) details.push_back("射程修正: " + formatFloat(mod->getModRangeBonus()));
-            if (mod->getModAccuracyMOA() != 0) details.push_back("精度修正: " + formatFloat(mod->getModAccuracyMOA()) + " MOA");
-            if (mod->getModFireRate() != 0) details.push_back("射速修正: " + std::to_string(mod->getModFireRate()) + " RPM");
-            if (mod->getModPenetrationBonus() != 0) details.push_back("穿透修正: " + formatFloat(mod->getModPenetrationBonus()));
-            if (mod->getModRecoil() != 0) details.push_back("后坐力修正: " + formatFloat(mod->getModRecoil() * 100) + "%");
-            if (mod->getModSoundLevel() != 0) details.push_back("消音效果: " + formatFloat(mod->getModSoundLevel() * 100) + "%");
+        if (gunMod) {
+            // 显示各种修正值（只显示非零的）
+            if (gunMod->getModDamageBonus() != 0) {
+                details.push_back("伤害修正: " + std::to_string(gunMod->getModDamageBonus()));
+            }
+            if (gunMod->getModRangeBonus() != 0) {
+                details.push_back("射程修正: " + std::to_string(gunMod->getModRangeBonus()) + " cm");
+            }
+            if (gunMod->getModAccuracyMOA() != 0) {
+                details.push_back("精度修正: " + formatFloat(gunMod->getModAccuracyMOA()) + " MOA");
+            }
+            if (gunMod->getModFireRate() != 0) {
+                details.push_back("射速修正: " + formatFloat(gunMod->getModFireRate()) + " RPM");
+            }
+            if (gunMod->getModRecoil() != 0) {
+                details.push_back("后坐力修正: " + formatFloat(gunMod->getModRecoil()));
+            }
+            if (gunMod->getModErgonomics() != 0) {
+                details.push_back("人体工程学修正: " + formatFloat(gunMod->getModErgonomics()));
+            }
+            if (gunMod->getModBreathStability() != 0) {
+                details.push_back("呼吸稳定性修正: " + formatFloat(gunMod->getModBreathStability()));
+            }
+            if (gunMod->getModBulletSpeedBonus() != 0) {
+                details.push_back("子弹速度修正: " + formatFloat(gunMod->getModBulletSpeedBonus()) + " m/s");
+            }
+            if (gunMod->getModPenetrationBonus() != 0) {
+                details.push_back("穿透力修正: " + formatFloat(gunMod->getModPenetrationBonus()));
+            }
+            if (gunMod->getModSoundLevel() != 0) {
+                details.push_back("声音级别修正: " + formatFloat(gunMod->getModSoundLevel()) + " dB");
+            }
         } else {
             details.push_back("警告: 物品标记为枪械配件但无法转换为GunMod类型");
         }
@@ -1397,14 +1622,14 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
             float detectStartX = windowX + 10.0f;
             float detectEndX = windowX + windowWidth - 10.0f;
             
-            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位检测: 鼠标(%d,%d), 手持区域(%.1f-%.1f,%.1f,%.1f)", 
-                       mouseX, mouseY, 
-                       detectStartX, detectEndX, handSlotRect.y, handSlotRect.height);
+            //SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位检测: 鼠标(%d,%d), 手持区域(%.1f-%.1f,%.1f,%.1f)", 
+            //           mouseX, mouseY, 
+            //           detectStartX, detectEndX, handSlotRect.y, handSlotRect.height);
             
             if (mouseX >= detectStartX && mouseX <= detectEndX &&
                 mouseY >= handSlotRect.y && mouseY <= handSlotRect.y + handSlotRect.height) {
                 droppedOnHeldItemSlot = true;
-                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到手持位置（铺满窗口宽度）");
+                //SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到手持位置（铺满窗口宽度）");
             }
         }
     }

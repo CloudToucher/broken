@@ -99,7 +99,7 @@ protected:
     
     // 生物特殊能力
     std::unordered_map<std::string, int> specialAbilities;  // 特殊能力及其等级
-    
+
     // 命中难度
     int meleeHitDifficulty;              // 近战命中难度
     int rangedHitDifficulty;             // 远程命中难度

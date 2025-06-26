@@ -480,9 +480,14 @@ std::unique_ptr<Item> ItemLoader::loadItemFromJson(const json& itemJson) {
         if (itemJson.contains("value")) item->setValue(itemJson["value"]);
         
         // 先加载装备槽位，再加载标签
-        // 加载装备槽位
+        // 加载装备槽位（向后兼容）
         if (itemJson.contains("equipSlots") && itemJson["equipSlots"].is_array()) {
             loadEquipSlots(item.get(), itemJson["equipSlots"]);
+        }
+        
+        // 加载覆盖率信息（新系统）
+        if (itemJson.contains("coverage")) {
+            loadCoverageSlots(item.get(), itemJson["coverage"]);
         }
         
         // 加载标签
@@ -1045,6 +1050,55 @@ void ItemLoader::loadEquipSlots(Item* item, const json& slotsJson) {
             else if (slotStr == "BACK") item->addEquipSlot(EquipSlot::BACK);
         }
     }
+}
+
+// 辅助方法：从JSON加载覆盖率信息
+void ItemLoader::loadCoverageSlots(Item* item, const json& coverageJson) {
+    // coverageJson可以是两种格式：
+    // 1. 数组格式：["CHEST", "ABDOMEN"] - 默认100%覆盖率
+    // 2. 对象格式：{"CHEST": 80, "ABDOMEN": 90} - 指定覆盖率
+    
+    if (coverageJson.is_array()) {
+        // 数组格式：默认100%覆盖率
+        for (const auto& slotJson : coverageJson) {
+            if (slotJson.is_string()) {
+                std::string slotStr = slotJson;
+                EquipSlot slot = stringToEquipSlot(slotStr);
+                if (slot != EquipSlot::NONE) {
+                    item->addCoverageSlot(slot, 100); // 默认100%覆盖率
+                }
+            }
+        }
+    } else if (coverageJson.is_object()) {
+        // 对象格式：指定覆盖率
+        for (auto it = coverageJson.begin(); it != coverageJson.end(); ++it) {
+            std::string slotStr = it.key();
+            EquipSlot slot = stringToEquipSlot(slotStr);
+            
+            if (slot != EquipSlot::NONE && it.value().is_number()) {
+                int coverage = it.value();
+                item->addCoverageSlot(slot, coverage);
+            }
+        }
+    }
+}
+
+// 辅助方法：将字符串转换为EquipSlot枚举
+EquipSlot ItemLoader::stringToEquipSlot(const std::string& slotStr) {
+    if (slotStr == "NONE") return EquipSlot::NONE;
+    else if (slotStr == "HEAD") return EquipSlot::HEAD;
+    else if (slotStr == "CHEST") return EquipSlot::CHEST;
+    else if (slotStr == "ABDOMEN") return EquipSlot::ABDOMEN;
+    else if (slotStr == "LEFT_LEG") return EquipSlot::LEFT_LEG;
+    else if (slotStr == "RIGHT_LEG") return EquipSlot::RIGHT_LEG;
+    else if (slotStr == "LEFT_FOOT") return EquipSlot::LEFT_FOOT;
+    else if (slotStr == "RIGHT_FOOT") return EquipSlot::RIGHT_FOOT;
+    else if (slotStr == "LEFT_ARM") return EquipSlot::LEFT_ARM;
+    else if (slotStr == "RIGHT_ARM") return EquipSlot::RIGHT_ARM;
+    else if (slotStr == "LEFT_HAND") return EquipSlot::LEFT_HAND;
+    else if (slotStr == "RIGHT_HAND") return EquipSlot::RIGHT_HAND;
+    else if (slotStr == "BACK") return EquipSlot::BACK;
+    else return EquipSlot::NONE;
 }
 
 // 从JSON对象加载武器

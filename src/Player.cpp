@@ -966,7 +966,11 @@ bool Player::takeDamage(const Damage& damage) {
     
     // 尝试闪避
     if (attemptDodge(attackerDexterity)) {
-        // 闪避成功，不受伤害
+        // 闪避成功，不受伤害，显示MISS飘字
+        Game* game = Game::getInstance();
+        if (game) {
+            game->addDamageNumber(x, y - radius, DamageNumberType::MISS);
+        }
         return false;
     }
     

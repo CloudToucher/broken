@@ -2,6 +2,9 @@
 #include "Entity.h"
 #include "Game.h"
 #include "SoundManager.h"
+#include "Player.h"
+#include "SkillSystem.h"
+#include "Creature.h"
 #include <random>
 #include <cmath>
 #include <algorithm>
@@ -112,38 +115,67 @@ bool AttackSystem::canAttack() const {
 AttackResult AttackSystem::performMeleeAttack(AttackMethod method, const AttackParams& params) {
     AttackResult result;
     
-    // 使用形状检测寻找目标
-    Entity* target = findTargetInShape(params);
-    if (!target) {
+    // 获取攻击范围内的所有目标，按距离排序
+    std::vector<Entity*> targets = getTargetsInRange(params);
+    if (targets.empty()) {
         return result; // 没有找到目标
     }
     
-    result.target = target;
-    result.hit = true;
+    // 按距离排序（最近的优先）
+    std::sort(targets.begin(), targets.end(), [this](Entity* a, Entity* b) {
+        float distA = getDistanceToTarget(a);
+        float distB = getDistanceToTarget(b);
+        return distA < distB;
+    });
     
-    // 计算伤害
-    bool isCritical = false;
-    Damage damage = calculateDamage(params, isCritical);
-    result.critical = isCritical;
-    
-    // 计算总伤害值（用于显示）
-    result.totalDamage = 0;
-    for (const auto& damageInfo : damage.getDamageList()) {
-        result.totalDamage += std::get<1>(damageInfo);
+    // 对每个目标尝试命中判定，直到命中或没有更多目标
+    for (Entity* target : targets) {
+        if (!target || target->getHealth() <= 0) {
+            continue;
+        }
+        
+        // 执行命中判定
+        if (performHitCheck(target, params)) {
+            // 命中成功
+            result.target = target;
+            result.hit = true;
+            
+            // 计算伤害
+            bool isCritical = false;
+            Damage damage = calculateDamage(params, isCritical);
+            result.critical = isCritical;
+            
+            // 计算总伤害值（用于显示）
+            result.totalDamage = 0;
+            for (const auto& damageInfo : damage.getDamageList()) {
+                result.totalDamage += std::get<1>(damageInfo);
+            }
+            
+            // 造成伤害
+            target->takeDamage(damage);
+            
+            // 应用特殊效果
+            applyEffects(target, params, result);
+            
+            std::cout << "近战攻击命中！造成 " << result.totalDamage << " 点伤害";
+            if (result.critical) {
+                std::cout << " (暴击!)";
+            }
+            std::cout << std::endl;
+            
+            return result; // 命中了，返回结果
+        } else {
+            // 未命中，显示miss飘字
+            Game* game = Game::getInstance();
+            if (game) {
+                game->addDamageNumber(target->getX(), target->getY() - target->getRadius(), DamageNumberType::MISS);
+            }
+            // 继续尝试下一个目标
+        }
     }
     
-    // 造成伤害
-    target->takeDamage(damage);
-    
-    // 应用特殊效果
-    applyEffects(target, params, result);
-    
-    std::cout << "近战攻击命中！造成 " << result.totalDamage << " 点伤害";
-    if (result.critical) {
-        std::cout << " (暴击!)";
-    }
-    std::cout << std::endl;
-    
+    // 所有目标都没有命中
+    std::cout << "近战攻击：所有目标都未命中！" << std::endl;
     return result;
 }
 
@@ -847,5 +879,97 @@ void AttackSystem::fillGradientSector(SDL_Renderer* renderer, float cx, float cy
             SDL_RenderLine(renderer, x3, y3, x4, y4);
             SDL_RenderLine(renderer, x4, y4, x1, y1);
         }
+    }
+}
+
+// 命中判定系统
+bool AttackSystem::performHitCheck(Entity* target, const AttackParams& params) {
+    if (!owner || !target) return false;
+    
+    // 检查攻击者是否是玩家
+    Player* player = dynamic_cast<Player*>(owner);
+    if (!player) {
+        // 如果不是玩家，使用简化的命中判定
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> d100(1, 100);
+        return d100(gen) <= 70; // 70%基础命中率
+    }
+    
+    // 使用Player的命中判定系统
+    // 获取玩家的技能系统
+    SkillSystem* skillSystem = player->getSkillSystem();
+    if (!skillSystem) return false;
+    
+    // 创建伤害对象用于技能计算
+    Damage weaponDamage;
+    if (params.damageType == "blunt") {
+        weaponDamage.addDamage(DamageType::BLUNT, params.baseDamage);
+    } else if (params.damageType == "piercing") {
+        weaponDamage.addDamage(DamageType::PIERCE, params.baseDamage);
+    } else if (params.damageType == "slashing") {
+        weaponDamage.addDamage(DamageType::SLASH, params.baseDamage);
+    } else {
+        weaponDamage.addDamage(DamageType::BLUNT, params.baseDamage); // 默认钝击
+    }
+    
+    // 获取最高伤害对应的技能等级
+    int maxDamage = 0;
+    SkillType correspondingSkill = SkillType::MELEE;
+    
+    for (const auto& damageInfo : weaponDamage.getDamageList()) {
+        std::string damageTypeStr = std::get<0>(damageInfo);
+        int damageValue = std::get<1>(damageInfo);
+        
+        if (damageValue > maxDamage) {
+            maxDamage = damageValue;
+            
+            // 根据伤害类型确定对应技能
+            if (damageTypeStr == "blunt") {
+                correspondingSkill = SkillType::BLUNT;
+            } else if (damageTypeStr == "piercing") {
+                correspondingSkill = SkillType::PIERCING;
+            } else if (damageTypeStr == "slashing") {
+                correspondingSkill = SkillType::SLASHING;
+            } else {
+                correspondingSkill = SkillType::MELEE;
+            }
+        }
+    }
+    
+    int highestSkillLevel = skillSystem->getSkillLevel(correspondingSkill);
+    
+    // 获取近战技能等级
+    int meleeSkillLevel = skillSystem->getSkillLevel(SkillType::MELEE);
+    
+    // 武器命中加成（简化处理，设为5）
+    int weaponAccuracyBonus = 5;
+    
+    // 计算攻击者命中值：(最高伤害技能等级 + 0.4*近战等级) + 敏捷d3 + 武器命中加成
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> d3(1, 3);
+    
+    float skillBonus = highestSkillLevel + 0.4f * meleeSkillLevel;
+    int attackerRoll = static_cast<int>(skillBonus) + d3(gen) + player->getAGI() + weaponAccuracyBonus;
+    
+    // 计算防御者闪避值：敏捷d3 + 近战命中难度
+    int meleeHitDifficulty = 10; // 默认命中难度
+    Creature* creature = dynamic_cast<Creature*>(target);
+    if (creature) {
+        meleeHitDifficulty = creature->getMeleeHitDifficulty();
+    }
+    int defenderRoll = d3(gen) + target->getDexterity() + meleeHitDifficulty;
+    
+    std::cout << "近战命中检定: 攻击者(" << skillBonus << "+" << player->getAGI() << "+d3+" << weaponAccuracyBonus 
+              << "=" << attackerRoll << ") vs 防御者(" << target->getDexterity() << "+" 
+              << meleeHitDifficulty << "+d3=" << defenderRoll << ")";
+    
+    if (attackerRoll > defenderRoll) {
+        std::cout << " -> 命中！" << std::endl;
+        return true;
+    } else {
+        std::cout << " -> 未命中！" << std::endl;
+        return false;
     }
 } 

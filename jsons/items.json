@@ -568,7 +568,50 @@
             "bulletDefense": 2.0,
             "flags": ["WEARABLE", "ARMOR", "SLOT_CHEST", "SLOT_ABDOMEN", "SLOT_LEFT_LEG", "SLOT_RIGHT_LEG", "SLOT_LEFT_ARM", "SLOT_RIGHT_ARM"],
             "categories": ["WEARABLE", "ARMOR"],
-            "equipSlots": ["CHEST", "ABDOMEN", "LEFT_LEG", "RIGHT_LEG", "LEFT_ARM", "RIGHT_ARM"]
+            "equipSlots": ["CHEST", "ABDOMEN", "LEFT_LEG", "RIGHT_LEG", "LEFT_ARM", "RIGHT_ARM"],
+            "coverage": {
+                "CHEST": 95,
+                "ABDOMEN": 90,
+                "LEFT_LEG": 85,
+                "RIGHT_LEG": 85,
+                "LEFT_ARM": 80,
+                "RIGHT_ARM": 80
+            }
+        },
+        {
+            "name": "防弹衣",
+            "weight": 1.8,
+            "volume": 2.0,
+            "length": 0.6,
+            "value": 350,
+            "description": "轻型防弹衣，主要保护胸部和腹部，对子弹有良好的防护效果。",
+            "piercingDefense": 8.0,
+            "bluntDefense": 6.0,
+            "slashingDefense": 3.0,
+            "bulletDefense": 15.0,
+            "flags": ["WEARABLE", "ARMOR", "SLOT_CHEST", "SLOT_ABDOMEN"],
+            "categories": ["WEARABLE", "ARMOR"],
+            "coverage": {
+                "CHEST": 80,
+                "ABDOMEN": 70
+            }
+        },
+        {
+            "name": "战术头盔",
+            "weight": 1.2,
+            "volume": 1.5,
+            "length": 0.3,
+            "value": 180,
+            "description": "现代战术头盔，提供头部保护，有效防护弹片和撞击。",
+            "piercingDefense": 6.0,
+            "bluntDefense": 8.0,
+            "slashingDefense": 4.0,
+            "bulletDefense": 12.0,
+            "flags": ["WEARABLE", "ARMOR", "SLOT_HEAD"],
+            "categories": ["WEARABLE", "ARMOR"],
+            "coverage": {
+                "HEAD": 75
+            }
         }
     ],
     "weapons": [

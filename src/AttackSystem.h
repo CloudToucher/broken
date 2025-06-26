@@ -164,6 +164,9 @@ private:
     // 应用特殊效果
     void applyEffects(Entity* target, const AttackParams& params, AttackResult& result);
     
+    // 命中判定系统
+    bool performHitCheck(Entity* target, const AttackParams& params);
+    
     // 寻找攻击目标
     Entity* findTarget(float range);
     
