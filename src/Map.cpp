@@ -1,5 +1,6 @@
 #include "Map.h"
 #include "Game.h"
+#include "Constants.h"
 #include <algorithm>
 #include <iostream>
 #include <fstream>
@@ -417,8 +418,8 @@ std::unique_ptr<Grid> Map::generateNewGrid(int gridX, int gridY) {
     //// std::cout << "  网格世界坐标: (" << worldX << ", " << worldY << ")" << std::endl;
     
     // 网格基本参数
-    int gridSize = 24; // 每个网格16x16个方块
-    int tileSize = 64; // 每个方块64x64像素
+    int gridSize = GameConstants::MAP_GRID_SIZE; // 每个网格的方块数
+    int tileSize = GameConstants::TILE_SIZE; // 每个方块的像素数
     
     // 创建一个新的网格
     std::stringstream gridName;
@@ -521,8 +522,8 @@ std::unique_ptr<Grid> Map::loadGridFromFile(int gridX, int gridY) {
         std::string gridName = "Grid_" + std::to_string(gridX) + "_" + std::to_string(gridY);
         int worldX, worldY;
         gridCoordToWorld(gridX, gridY, worldX, worldY); // 默认世界坐标
-        int gridSize = 24; // 默认网格大小
-        int tileSize = 64; // 默认方块大小
+        int gridSize = GameConstants::MAP_GRID_SIZE; // 默认网格大小
+        int tileSize = GameConstants::TILE_SIZE; // 默认方块大小
         
         // 读取文件内容
         std::string line;
@@ -678,9 +679,9 @@ std::unique_ptr<Grid> Map::loadGridFromFile(int gridX, int gridY) {
 }
 
 void Map::worldToGridCoord(float worldX, float worldY, int& gridX, int& gridY) {
-    // 假设每个网格是16x16个方块，每个方块是64x64像素
-    int gridSize = 24;
-    int tileSize = 64;
+    // 使用常量来定义网格和方块大小
+    int gridSize = GameConstants::MAP_GRID_SIZE;
+    int tileSize = GameConstants::TILE_SIZE;
     int totalGridSize = gridSize * tileSize;
     
     // 计算网格坐标
@@ -689,9 +690,9 @@ void Map::worldToGridCoord(float worldX, float worldY, int& gridX, int& gridY) {
 }
 
 void Map::gridCoordToWorld(int gridX, int gridY, int& worldX, int& worldY) {
-    // 假设每个网格是24x24个方块，每个方块是64x64像素
-    int gridSize = 24;
-    int tileSize = 64;
+    // 使用常量来定义网格和方块大小
+    int gridSize = GameConstants::MAP_GRID_SIZE;
+    int tileSize = GameConstants::TILE_SIZE;
     int totalGridSize = gridSize * tileSize;
     
     // 计算世界坐标（网格左下角）

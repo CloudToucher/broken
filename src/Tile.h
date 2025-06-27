@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 #include <string>
 #include "Collider.h"
+#include "Constants.h"
 #include <thread>
 #include <mutex>
 #include <unordered_map>
@@ -42,7 +43,7 @@ private:
 public:
     // 构造函数
     Tile(const std::string& tileName, const std::string& texPath, bool collision, 
-         bool transparent, bool destructible, int posX, int posY, int tileSize = 64, float tileMoveCost = 100.0f);
+         bool transparent, bool destructible, int posX, int posY, int tileSize = GameConstants::TILE_SIZE, float tileMoveCost = 100.0f);
     ~Tile();
 
     static void clearTextureCache();

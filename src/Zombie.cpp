@@ -3,6 +3,7 @@
 #include "Map.h"
 #include "CreatureAttack.h"
 #include "Pathfinding.h"
+#include "Constants.h"
 #include <cmath>
 #include <algorithm>
 #include <random>
@@ -83,10 +84,10 @@ Zombie::Zombie(
             break;
     }
     
-    // 统一设置感知范围（以格为单位，1格=64像素）
-    setVisualRange(80);  // 80格视觉范围 (5120像素)
-    setHearingRange(10); // 10格听觉范围 (640像素)
-    setSmellRange(5);    // 5格嗅觉范围 (320像素)
+    // 统一设置感知范围（以格为单位，使用常量）
+    setVisualRange(80);  // 80格视觉范围
+    setHearingRange(10); // 10格听觉范围
+    setSmellRange(5);    // 5格嗅觉范围
     
     // 创建个人气味源
     personalScent = std::make_unique<ScentSource>(
@@ -279,7 +280,7 @@ void Zombie::handleIdleState(float deltaTime) {
 void Zombie::handleWanderingState(float deltaTime) {
     // 徘徊状态：随机挪动1-2格
     if (wanderTimer <= 0) {
-        // 选择新的徘徊目标（1-2格距离，每格64像素）
+        // 选择新的徘徊目标（1-2格距离）
         static std::random_device rd;
         static std::mt19937 gen(rd());
         std::uniform_int_distribution<> gridDis(1, 2); // 1-2格
@@ -287,7 +288,7 @@ void Zombie::handleWanderingState(float deltaTime) {
         
         int grids = gridDis(gen);
         double angle = angleDis(gen);
-        int distance = grids * 64; // 每格64像素
+        int distance = grids * GameConstants::TILE_SIZE; // 每格的像素数
         
         wanderX = x + static_cast<int>(distance * cos(angle));
         wanderY = y + static_cast<int>(distance * sin(angle));
@@ -354,7 +355,7 @@ void Zombie::handleInvestigatingState(float deltaTime) {
         moveToPosition(static_cast<float>(soundTarget->x), static_cast<float>(soundTarget->y), deltaTime);
         
         // 如果到达声源位置
-        if (distanceToTarget(soundTarget->x, soundTarget->y) < 64.0f) {
+        if (distanceToTarget(soundTarget->x, soundTarget->y) < GameConstants::TILE_SIZE) {
             soundTarget = nullptr;
             setZombieState(ZombieState::WANDERING);
         }
@@ -365,7 +366,7 @@ void Zombie::handleInvestigatingState(float deltaTime) {
             static std::random_device rd;
             static std::mt19937 gen(rd());
             std::uniform_real_distribution<> angleDis(0.0, 2.0 * 3.14159);
-            std::uniform_int_distribution<> distDis(64, 192); // 1-3格距离
+            std::uniform_int_distribution<> distDis(GameConstants::TILE_SIZE, GameConstants::TILE_SIZE * 3); // 1-3格距离
             
             double angle = angleDis(gen);
             int distance = distDis(gen);
@@ -607,8 +608,8 @@ void Zombie::moveToPosition(float targetX, float targetY, float deltaTime) {
             (targetY - lastTargetY) * (targetY - lastTargetY)
         );
         
-        // 如果目标位置与上次寻路失败的位置很接近（64像素内），则使用直线移动
-        if (distanceToLastFailedTarget < 64.0f) {
+        // 如果目标位置与上次寻路失败的位置很接近（一个瓦片内），则使用直线移动
+        if (distanceToLastFailedTarget < GameConstants::TILE_SIZE) {
             // 寻路失败冷却期间，使用直线移动
             moveDirectlyToPosition(targetX, targetY, deltaTime);
             return;
@@ -701,15 +702,15 @@ void Zombie::moveDirectlyToPosition(float targetX, float targetY, float deltaTim
             }
             
             // 获取生物可能影响的tile范围
-            int minTileX = static_cast<int>((newX - collider.getWidth()/2) / 64);
-            int maxTileX = static_cast<int>((newX + collider.getWidth()/2) / 64);
-            int minTileY = static_cast<int>((newY - collider.getHeight()/2) / 64);
-            int maxTileY = static_cast<int>((newY + collider.getHeight()/2) / 64);
+            int minTileX = GameConstants::worldToTileCoord(newX - collider.getWidth()/2);
+            int maxTileX = GameConstants::worldToTileCoord(newX + collider.getWidth()/2);
+            int minTileY = GameConstants::worldToTileCoord(newY - collider.getHeight()/2);
+            int maxTileY = GameConstants::worldToTileCoord(newY + collider.getHeight()/2);
             
             // 检查与地形的碰撞
             for (int tileX = minTileX; tileX <= maxTileX && canMove; tileX++) {
                 for (int tileY = minTileY; tileY <= maxTileY && canMove; tileY++) {
-                    Tile* tile = game->getMap()->getTileAt(tileX * 64, tileY * 64);
+                    Tile* tile = game->getMap()->getTileAt(GameConstants::tileCoordToWorld(tileX), GameConstants::tileCoordToWorld(tileY));
                     if (tile && tile->hasColliderWithPurpose(ColliderPurpose::TERRAIN)) {
                         auto terrainColliders = tile->getCollidersByPurpose(ColliderPurpose::TERRAIN);
                         for (Collider* terrainCollider : terrainColliders) {

@@ -12,6 +12,7 @@
 #include "EntityStateEffect.h" // 添加EntityStateEffect.h头文件
 #include "Damage.h" // 添加Damage.h头文件
 #include "EntityFlag.h" // 添加EntityFlag.h头文件
+#include "Constants.h" // 添加Constants.h头文件
 
 // 在现有的Entity.cpp文件中添加以下内容
 
@@ -1382,15 +1383,15 @@ void Entity::checkTerrainCollisionAtPosition(float& newX, float& newY) {
     }
     
     // 获取可能影响的tile范围
-    int minTileX = static_cast<int>((newX - radius) / 64);
-    int maxTileX = static_cast<int>((newX + radius) / 64);
-    int minTileY = static_cast<int>((newY - radius) / 64);
-    int maxTileY = static_cast<int>((newY + radius) / 64);
+    int minTileX = GameConstants::worldToTileCoord(newX - radius);
+    int maxTileX = GameConstants::worldToTileCoord(newX + radius);
+    int minTileY = GameConstants::worldToTileCoord(newY - radius);
+    int maxTileY = GameConstants::worldToTileCoord(newY + radius);
     
     // 检查与地形的碰撞
     for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
         for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
-            Tile* tile = game->getMap()->getTileAt(tileX * 64, tileY * 64);
+            Tile* tile = game->getMap()->getTileAt(GameConstants::tileCoordToWorld(tileX), GameConstants::tileCoordToWorld(tileY));
             if (tile && tile->hasColliderWithPurpose(ColliderPurpose::TERRAIN)) {
                 auto terrainColliders = tile->getCollidersByPurpose(ColliderPurpose::TERRAIN);
                 for (Collider* terrainCollider : terrainColliders) {

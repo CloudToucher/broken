@@ -4,6 +4,7 @@
 #include "Map.h"
 #include "HUD.h"
 #include "Collider.h"
+#include "Constants.h"
 #include <algorithm>
 #include "Item.h" 
 #include "Gun.h"      // 添加 Gun.h
@@ -1258,16 +1259,16 @@ void Game::renderColliders() {
     }
     
     // 渲染地图中的地形碰撞箱（绿色）
-    // 获取当前屏幕可见区域的tile范围
-    int minTileX = static_cast<int>(cameraX / 64) - 1;
-    int maxTileX = static_cast<int>((cameraX + windowWidth / zoomLevel) / 64) + 1;
-    int minTileY = static_cast<int>(cameraY / 64) - 1;
-    int maxTileY = static_cast<int>((cameraY + windowHeight / zoomLevel) / 64) + 1;
+    // 获取当前屏幕可见区域的tile范围，考虑缩放倍数
+    int minTileX = static_cast<int>(cameraX / GameConstants::TILE_SIZE) - 1;
+    int maxTileX = static_cast<int>((cameraX + windowWidth / zoomLevel) / GameConstants::TILE_SIZE) + 1;
+    int minTileY = static_cast<int>(cameraY / GameConstants::TILE_SIZE) - 1;
+    int maxTileY = static_cast<int>((cameraY + windowHeight / zoomLevel) / GameConstants::TILE_SIZE) + 1;
     
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 128); // 半透明绿色
     for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
         for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
-            Tile* tile = gameMap->getTileAt(tileX * 64, tileY * 64);
+            Tile* tile = gameMap->getTileAt(tileX * GameConstants::TILE_SIZE, tileY * GameConstants::TILE_SIZE);
             if (tile && tile->hasColliderWithPurpose(ColliderPurpose::TERRAIN)) {
                 // 渲染该tile的所有地形碰撞箱
                 auto terrainColliders = tile->getCollidersByPurpose(ColliderPurpose::TERRAIN);

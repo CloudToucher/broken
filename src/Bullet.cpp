@@ -1,5 +1,6 @@
 #include "Bullet.h"
 #include "Entity.h"
+#include "Constants.h"
 #include <cmath>
 #include <algorithm>
 
@@ -9,7 +10,7 @@ Bullet::Bullet(float startX, float startY, float dx, float dy, float s,
 : x(startX), y(startY), prevX(startX), prevY(startY),
   dirX(dx), dirY(dy), speed(s), active(true), 
   owner(bulletOwner),
-  maxRange(range * 64.0f),
+  maxRange(range * GameConstants::TILE_SIZE),
   traveledDistance(0.0f),
   damage(bulletOwner) {
     // 添加伤害

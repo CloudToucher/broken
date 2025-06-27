@@ -3,12 +3,10 @@
 #include "Tile.h"
 #include "Game.h"
 #include "Collider.h"
+#include "Constants.h"
 #include <cmath>
 #include <algorithm>
 #include <iostream>
-
-// 常量定义
-const int GRID_SIZE = 64; // 网格大小（像素）
 
 // AStar类实现
 
@@ -45,8 +43,8 @@ bool AStar::isWalkable(int x, int y) const {
     if (!map) return false;
     
     // 将网格坐标转换为世界坐标
-    int worldX = x * 64;  // 假设每个网格64像素
-    int worldY = y * 64;
+    int worldX = x * GameConstants::TILE_SIZE;
+    int worldY = y * GameConstants::TILE_SIZE;
     
     // 获取该位置的tile
     Tile* tile = map->getTileAt(worldX, worldY);
@@ -60,8 +58,8 @@ float AStar::getMoveCost(int fromX, int fromY, int toX, int toY) const {
     if (!map) return 1.0f;
     
     // 将网格坐标转换为世界坐标
-    int worldX = toX * 64;
-    int worldY = toY * 64;
+    int worldX = toX * GameConstants::TILE_SIZE;
+    int worldY = toY * GameConstants::TILE_SIZE;
     
     // 获取目标tile的移动耗时倍数
     Tile* tile = map->getTileAt(worldX, worldY);
@@ -89,11 +87,11 @@ std::vector<PathPoint> AStar::reconstructPath(PathNode* endNode) const {
     
     while (current != nullptr) {
         // 将网格坐标转换为世界坐标（网格中心）
-        float worldX = current->x * 64.0f + 32.0f;
-        float worldY = current->y * 64.0f + 32.0f;
+        float worldX = current->x * GameConstants::TILE_SIZE + GameConstants::TILE_CENTER_OFFSET;
+        float worldY = current->y * GameConstants::TILE_SIZE + GameConstants::TILE_CENTER_OFFSET;
         
         // 获取移动耗时倍数
-        Tile* tile = map->getTileAt(current->x * 64, current->y * 64);
+        Tile* tile = map->getTileAt(current->x * GameConstants::TILE_SIZE, current->y * GameConstants::TILE_SIZE);
         float moveCost = tile ? tile->getMoveCost() / 100.0f : 1.0f;
         
         path.emplace_back(worldX, worldY, moveCost);

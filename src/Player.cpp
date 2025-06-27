@@ -12,6 +12,7 @@
 #include "AttackSystem.h" // 包含攻击系统头文件
 #include "MeleeWeapon.h" // 包含通用近战武器头文件
 #include "Damage.h" // 包含伤害系统头文件
+#include "Constants.h" // 包含常量定义
 #include <random> // 包含随机数生成器
 
 
@@ -30,10 +31,10 @@ Player::Player(float startX, float startY)
     setPhysicalAttributes(70.0f, 12, 10);  // 重量70kg，力量12，敏捷10（人类平衡型）
     isStatic = false;      // 玩家是动态物体
     
-    // 设置玩家的感知范围（以格为单位，1格=64像素）
-    setVisualRange(80);  // 80格视觉范围 (5120像素)
-    setHearingRange(10); // 10格听觉范围 (640像素)
-    setSmellRange(5);    // 5格嗅觉范围 (320像素)
+    // 设置玩家的感知范围（以格为单位，使用常量）
+    setVisualRange(80);  // 80格视觉范围
+    setHearingRange(10); // 10格听觉范围
+    setSmellRange(5);    // 5格嗅觉范围
     
     //// 设置玩家的行为参数
     //setAggressionLevel(0.3f);      // 较低的攻击性

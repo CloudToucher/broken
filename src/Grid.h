@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include "Tile.h"
+#include "Constants.h"
 
 class Grid {
 private:
@@ -18,7 +19,7 @@ private:
 
 public:
     // 构造函数
-    Grid(const std::string& gridName, int posX, int posY, int gSize = 16, int tSize = 64);
+    Grid(const std::string& gridName, int posX, int posY, int gSize = GameConstants::DEFAULT_GRID_SIZE, int tSize = GameConstants::TILE_SIZE);
     
     // 添加方块到网格
     void addTile(std::unique_ptr<Tile> tile, int gridX, int gridY);
@@ -50,7 +51,7 @@ public:
     void setPosition(int posX, int posY);
     
     // 创建一个全是草地的网格
-    static std::unique_ptr<Grid> createGrasslandGrid(int posX, int posY, int gSize = 16, int tSize = 64);
+    static std::unique_ptr<Grid> createGrasslandGrid(int posX, int posY, int gSize = GameConstants::DEFAULT_GRID_SIZE, int tSize = GameConstants::TILE_SIZE);
 };
 
 #endif // GRID_H

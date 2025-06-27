@@ -5,6 +5,7 @@
 #include "Action.h"
 #include "Entity.h"
 #include "MeleeWeapon.h"
+#include "Constants.h"
 #include <string>
 #include <vector>
 
@@ -170,8 +171,8 @@ void HUD::renderCoordinates(SDL_Renderer* renderer, float worldX, float worldY) 
     Map::worldToGridCoord(worldX, worldY, gridX, gridY);
     
     // 计算方块坐标
-    int gridSize = 16; // 网格大小
-    int tileSize = 64; // 方块大小
+    int gridSize = GameConstants::DEFAULT_GRID_SIZE; // 网格大小
+    int tileSize = GameConstants::TILE_SIZE; // 方块大小
     int totalGridSize = gridSize * tileSize;
     
     // 计算在网格内的相对坐标

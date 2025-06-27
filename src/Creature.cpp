@@ -8,6 +8,7 @@
 #include "Pathfinding.h"
 #include "Map.h"
 #include "Tile.h"
+#include "Constants.h"
 
 // 构造函数
 Creature::Creature(
@@ -587,8 +588,8 @@ bool Creature::canSeeEntity(Entity* entity) const {
     float dy = entity->getY() - y;
     float distance = sqrt(dx * dx + dy * dy);
     
-    // 检查是否在视觉范围内（一格等于64像素）
-    float visualRangePixels = visualRange * 64.0f;
+    // 检查是否在视觉范围内
+    float visualRangePixels = GameConstants::gridsToPixels(visualRange);
     if (distance > visualRangePixels) {
         return false;
     }
@@ -609,8 +610,8 @@ bool Creature::canHearSound(const SoundSource& sound) const {
     float dy = sound.y - y;
     float distance = sqrt(dx * dx + dy * dy);
     
-    // 听觉半径转换为像素（一格等于64像素）
-    float hearingRangePixels = hearingRange * 64.0f;
+    // 听觉半径转换为像素
+    float hearingRangePixels = GameConstants::gridsToPixels(hearingRange);
     
     // 检查距离是否在听觉半径和声音传播半径内
     return (distance <= hearingRangePixels && distance <= sound.radius);
