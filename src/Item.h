@@ -27,6 +27,7 @@ enum class ItemRarity {
 enum class EquipSlot {
     NONE,           // 不可穿戴
     HEAD,           // 头部
+    EYES,           // 眼部
     CHEST,          // 胸部
     ABDOMEN,        // 腹部
     LEFT_LEG,       // 左腿
@@ -44,9 +45,10 @@ enum class EquipSlot {
 struct EquipSlotCoverage {
     EquipSlot slot;         // 覆盖的部位
     int coverage;           // 覆盖率（0-100）
+    int burden;             // 累赘值（对行动的干扰程度）
     
-    EquipSlotCoverage(EquipSlot s = EquipSlot::NONE, int c = 0) 
-        : slot(s), coverage(c) {}
+    EquipSlotCoverage(EquipSlot s = EquipSlot::NONE, int c = 0, int b = 0) 
+        : slot(s), coverage(c), burden(b) {}
 };
 
 class Item {
@@ -176,9 +178,10 @@ public:
     void removeEquipSlot(EquipSlot slot);
     
     // 新的覆盖率相关方法
-    void addCoverageSlot(EquipSlot slot, int coverage = 100);
-    void setCoverageSlot(EquipSlot slot, int coverage);
+    void addCoverageSlot(EquipSlot slot, int coverage = 100, int burden = 0);
+    void setCoverageSlot(EquipSlot slot, int coverage, int burden = 0);
     int getCoverage(EquipSlot slot) const;
+    int getBurden(EquipSlot slot) const;
     bool hasSlotCoverage(EquipSlot slot) const;
     void removeCoverageSlot(EquipSlot slot);
     const std::vector<EquipSlotCoverage>& getCoverageSlots() const { return coverageSlots; }

@@ -327,7 +327,7 @@ bool Game::init() {
             // 18级闪避：18*100 = 1800经验值
             player->getSkillSystem()->addExperience(SkillType::DODGE, 1800);
             std::cout << "测试数据：闪避技能设置为18级" << std::endl;
-        }
+                }
             }
             
             /*
@@ -2143,6 +2143,7 @@ void Game::testCoverageSystem() {
                 std::string slotName;
                 switch (coverage.slot) {
                     case EquipSlot::HEAD: slotName = "头部"; break;
+                    case EquipSlot::EYES: slotName = "眼部"; break;
                     case EquipSlot::CHEST: slotName = "胸部"; break;
                     case EquipSlot::ABDOMEN: slotName = "腹部"; break;
                     case EquipSlot::LEFT_LEG: slotName = "左腿"; break;
@@ -2169,6 +2170,7 @@ void Game::testCoverageSystem() {
             std::string slotName;
             switch (slot) {
                 case EquipSlot::HEAD: slotName = "头部"; break;
+                case EquipSlot::EYES: slotName = "眼部"; break;
                 case EquipSlot::CHEST: slotName = "胸部"; break;
                 case EquipSlot::ABDOMEN: slotName = "腹部"; break;
                 case EquipSlot::LEFT_LEG: slotName = "左腿"; break;

@@ -1037,6 +1037,7 @@ void ItemLoader::loadEquipSlots(Item* item, const json& slotsJson) {
             // 将字符串转换为EquipSlot枚举
             if (slotStr == "NONE") item->addEquipSlot(EquipSlot::NONE);
             else if (slotStr == "HEAD") item->addEquipSlot(EquipSlot::HEAD);
+            else if (slotStr == "EYES") item->addEquipSlot(EquipSlot::EYES);
             else if (slotStr == "CHEST") item->addEquipSlot(EquipSlot::CHEST);
             else if (slotStr == "ABDOMEN") item->addEquipSlot(EquipSlot::ABDOMEN);
             else if (slotStr == "LEFT_LEG") item->addEquipSlot(EquipSlot::LEFT_LEG);
@@ -1054,30 +1055,48 @@ void ItemLoader::loadEquipSlots(Item* item, const json& slotsJson) {
 
 // 辅助方法：从JSON加载覆盖率信息
 void ItemLoader::loadCoverageSlots(Item* item, const json& coverageJson) {
-    // coverageJson可以是两种格式：
-    // 1. 数组格式：["CHEST", "ABDOMEN"] - 默认100%覆盖率
-    // 2. 对象格式：{"CHEST": 80, "ABDOMEN": 90} - 指定覆盖率
+    // coverageJson可以是三种格式：
+    // 1. 数组格式：["CHEST", "ABDOMEN"] - 默认100%覆盖率，0累赘值
+    // 2. 对象格式（简单）：{"CHEST": 80, "ABDOMEN": 90} - 指定覆盖率，0累赘值
+    // 3. 对象格式（完整）：{"CHEST": {"coverage": 80, "burden": 5}, "ABDOMEN": {"coverage": 90, "burden": 3}}
     
     if (coverageJson.is_array()) {
-        // 数组格式：默认100%覆盖率
+        // 数组格式：默认100%覆盖率，0累赘值
         for (const auto& slotJson : coverageJson) {
             if (slotJson.is_string()) {
                 std::string slotStr = slotJson;
                 EquipSlot slot = stringToEquipSlot(slotStr);
                 if (slot != EquipSlot::NONE) {
-                    item->addCoverageSlot(slot, 100); // 默认100%覆盖率
+                    item->addCoverageSlot(slot, 100, 0); // 默认100%覆盖率，0累赘值
                 }
             }
         }
     } else if (coverageJson.is_object()) {
-        // 对象格式：指定覆盖率
+        // 对象格式：指定覆盖率和累赘值
         for (auto it = coverageJson.begin(); it != coverageJson.end(); ++it) {
             std::string slotStr = it.key();
             EquipSlot slot = stringToEquipSlot(slotStr);
             
-            if (slot != EquipSlot::NONE && it.value().is_number()) {
-                int coverage = it.value();
-                item->addCoverageSlot(slot, coverage);
+            if (slot != EquipSlot::NONE) {
+                if (it.value().is_number()) {
+                    // 简单格式：只有覆盖率
+                    int coverage = it.value();
+                    item->addCoverageSlot(slot, coverage, 0); // 默认累赘值为0
+                } else if (it.value().is_object()) {
+                    // 完整格式：包含覆盖率和累赘值
+                    const json& slotData = it.value();
+                    int coverage = 100; // 默认覆盖率
+                    int burden = 0;     // 默认累赘值
+                    
+                    if (slotData.contains("coverage") && slotData["coverage"].is_number()) {
+                        coverage = slotData["coverage"];
+                    }
+                    if (slotData.contains("burden") && slotData["burden"].is_number()) {
+                        burden = slotData["burden"];
+                    }
+                    
+                    item->addCoverageSlot(slot, coverage, burden);
+                }
             }
         }
     }
@@ -1087,6 +1106,8 @@ void ItemLoader::loadCoverageSlots(Item* item, const json& coverageJson) {
 EquipSlot ItemLoader::stringToEquipSlot(const std::string& slotStr) {
     if (slotStr == "NONE") return EquipSlot::NONE;
     else if (slotStr == "HEAD") return EquipSlot::HEAD;
+    else if (slotStr == "EYES") return EquipSlot::EYES;
+    else if (slotStr == "EYES") return EquipSlot::EYES;
     else if (slotStr == "CHEST") return EquipSlot::CHEST;
     else if (slotStr == "ABDOMEN") return EquipSlot::ABDOMEN;
     else if (slotStr == "LEFT_LEG") return EquipSlot::LEFT_LEG;

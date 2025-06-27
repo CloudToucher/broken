@@ -24,8 +24,10 @@
 ### 系统要求
 
 - CMake 3.16 或更高版本
-- C++17 兼容的编译器（Visual Studio 2019+, GCC 8+, Clang 7+）
-- Windows/Linux/macOS 操作系统
+- C++17 兼容的编译器
+  - Windows: Visual Studio 2019 或更高版本
+  - Linux: GCC 9+ 或 Clang 10+
+  - macOS: Xcode 11+ 或 Clang 10+
 
 ### 依赖库
 
@@ -34,72 +36,157 @@
 - **SDL3_ttf**: 字体渲染
 - **nlohmann/json**: JSON解析
 
-### 编译步骤
+### 编译说明
 
-#### Windows (推荐使用 Visual Studio)
+#### Windows (Visual Studio)
 
+**支持的Visual Studio版本及对应生成器**：
+- Visual Studio 2019: `"Visual Studio 16 2019"`
+- Visual Studio 2022: `"Visual Studio 17 2022"`
+
+**完整编译步骤**：
+
+1. 确保已安装对应版本的Visual Studio
+2. 克隆仓库：
+   ```bash
+   git clone <repository-url>
+   cd broken
+   ```
+3. 创建编译目录：
+   ```bash
+   mkdir build
+   cd build
+   ```
+4. 生成项目文件（根据你的VS版本选择）：
+   ```bash
+   # Visual Studio 2022 (推荐)
+   cmake .. -G "Visual Studio 17 2022" -A x64
+   
+   # Visual Studio 2019
+   cmake .. -G "Visual Studio 16 2019" -A x64
+   ```
+5. 编译项目：
+   ```bash
+   # Debug版本 (带调试信息，exe大小约3.5MB)
+   cmake --build . --config Debug
+   
+   # Release版本 (优化版本，exe大小约600KB)
+   cmake --build . --config Release
+   ```
+6. 运行游戏：
+   ```bash
+   # Debug版本
+   cd bin\Debug
+   .\broken.exe
+   
+   # Release版本
+   cd bin\Release
+   .\broken.exe
+   ```
+
+**Visual Studio IDE方式**：
+1. 打开Visual Studio
+2. 选择"打开本地文件夹"
+3. 选择项目根目录
+4. 等待CMake配置完成
+5. 在顶部工具栏选择配置（Debug/Release）
+6. 按F5运行或Ctrl+Shift+B编译
+
+#### Linux
+
+1. 安装依赖：
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install build-essential cmake
+   
+   # CentOS/RHEL
+   sudo yum install gcc-c++ cmake
+   ```
+2. 克隆并编译：
 ```bash
-# 克隆项目
 git clone <repository-url>
 cd broken
-
-# 创建构建目录
 mkdir build
 cd build
-
-# 配置项目
 cmake ..
-
-# 编译项目
-cmake --build .
-
-# 运行游戏
-cd bin\Debug
-.\broken.exe
-```
-
-#### Linux/macOS
-
-```bash
-# 克隆项目
-git clone <repository-url>
-cd broken
-
-# 创建构建目录
-mkdir build
-cd build
-
-# 配置项目
-cmake ..
-
-# 编译项目（使用多核）
 make -j$(nproc)
+   ```
 
-# 运行游戏
-cd bin/Debug
-./broken
+#### macOS
+
+1. 安装 Xcode Command Line Tools：
+   ```bash
+   xcode-select --install
+   ```
+2. 安装 CMake（通过 Homebrew）：
+   ```bash
+   brew install cmake
+   ```
+3. 克隆并编译：
+   ```bash
+   git clone <repository-url>
+   cd broken
+   mkdir build
+   cd build
+   cmake ..
+   make -j$(sysctl -n hw.ncpu)
 ```
 
-### 编译选项
+### 编译选项和配置
 
-可以在cmake配置时添加以下选项：
+#### CMake配置选项
 
 ```bash
-# Debug 模式（默认）
-cmake .. -DCMAKE_BUILD_TYPE=Debug
+# 不同Visual Studio版本的生成器
+cmake .. -G "Visual Studio 17 2022" -A x64  # VS 2022 (推荐)
+cmake .. -G "Visual Studio 16 2019" -A x64  # VS 2019
 
-# Release 模式
-cmake .. -DCMAKE_BUILD_TYPE=Release
-
-# 指定生成器（Windows）
-cmake .. -G "Visual Studio 17 2022"
+# Linux/macOS构建类型
+cmake .. -DCMAKE_BUILD_TYPE=Debug    # Debug模式
+cmake .. -DCMAKE_BUILD_TYPE=Release  # Release模式
 ```
+
+#### 构建配置区别
+
+| 配置 | 大小 | 优化 | 调试信息 | 控制台 | 性能 |
+|------|------|------|----------|--------|------|
+| Debug | ~3.5MB | 无 | 完整 | 显示 | 较低 |
+| Release | ~600KB | 最大 | 无 | 显示 | 最佳 |
+
+**推荐配置**：
+- **开发调试**: 使用Debug配置，方便调试和查看控制台输出
+- **正式发布**: 使用Release配置，体积小、性能好
 
 ### 故障排除
 
-1. **编码错误（Windows）**: 项目已配置UTF-8编码支持，确保使用Visual Studio 2019+
-2. **SDL3库找不到**: 确保SDL3库文件在 `libs/` 目录中
-3. **权限问题**: 确保对项目目录有读写权限
+#### 编译问题
+1. **CMake生成器错误**: 确保使用正确的Visual Studio版本对应的生成器
+   ```bash
+   # 错误: cmake ..
+   # 正确: cmake .. -G "Visual Studio 17 2022" -A x64
+   ```
+
+2. **编码错误（Windows）**: 项目已配置UTF-8编码支持，确保使用Visual Studio 2019+
+
+3. **SDL3库找不到**: 确保SDL3库文件在 `libs/` 目录中
+
+4. **CMakeSettings.json错误**: 如果Visual Studio提示CMakeSettings错误，删除该文件重新配置
+
+#### 运行问题
+1. **找不到.exe文件**: 程序生成在 `build/bin/Debug/` 或 `build/bin/Release/` 目录中
+   ```bash
+   # 正确路径
+   cd build/bin/Debug
+   .\broken.exe
+   ```
+
+2. **缺少DLL文件**: SDL3相关DLL会自动复制，如果丢失请重新编译
+
+3. **资源文件找不到**: 确保assets、jsons、map文件夹已正确复制到exe同目录
+
+#### 权限问题
+- 确保对项目目录有读写权限
+- Windows可能需要以管理员身份运行PowerShell/命令提示符
 
 ## 核心架构
 
