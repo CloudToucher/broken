@@ -19,6 +19,15 @@ struct ElementRenderRect {
     float height;
 };
 
+// UI块结构体
+struct UIBlock {
+    std::string name;           // 块名称
+    float topY;                 // 块顶部Y坐标
+    float bottomY;              // 块底部Y坐标
+    SDL_Color backgroundColor;  // 背景色
+    SDL_Color borderColor;      // 边框色
+};
+
 // 文本换行结果结构体
 struct WrappedTextLine {
     std::string text;
@@ -49,6 +58,10 @@ private:
     
     // 用于累计Y轴偏移量
     float currentYOffset;
+    
+    // UI块管理
+    std::vector<UIBlock> uiBlocks;
+    bool blocksEnabled;
     
     // 元素点击回调
     ElementClickCallback elementClickCallback;
@@ -129,6 +142,15 @@ public:
     
     // 调试功能：绘制元素边框
     void renderElementBorders(SDL_Renderer* renderer, SDL_Color borderColor = {255, 0, 0, 255});
+    
+    // UI块管理方法
+    void setBlocksEnabled(bool enabled) { blocksEnabled = enabled; }
+    bool getBlocksEnabled() const { return blocksEnabled; }
+    void clearBlocks();
+    void addBlock(const std::string& name, float topY, float bottomY,
+                  SDL_Color backgroundColor, SDL_Color borderColor);
+    void analyzeAndCreateBlocks(); // 动态分析元素并创建块
+    void renderBlocks(SDL_Renderer* renderer);
 
     // 获取字体
     TTF_Font* getTitleFont() const { return titleFont; }

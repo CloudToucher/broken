@@ -286,10 +286,10 @@ PathfindingResult CreaturePathfinder::requestPath(void* creature, int startX, in
     }
     
     // 将世界坐标转换为网格坐标
-    int gridStartX = startX / GRID_SIZE;
-    int gridStartY = startY / GRID_SIZE;
-    int gridTargetX = targetX / GRID_SIZE;
-    int gridTargetY = targetY / GRID_SIZE;
+    int gridStartX = startX / GameConstants::TILE_SIZE;
+    int gridStartY = startY / GameConstants::TILE_SIZE;
+    int gridTargetX = targetX / GameConstants::TILE_SIZE;
+    int gridTargetY = targetY / GameConstants::TILE_SIZE;
     
     // 检查是否有直接无障碍路径
     if (astar.hasDirectPath(gridStartX, gridStartY, gridTargetX, gridTargetY)) {

@@ -19,7 +19,8 @@ UIWindow::UIWindow(float x, float y, float width, float height, SDL_Color border
     normalFont(nullptr),
     maxContentWidth(400.0f),
     padding(20.0f),
-    autoResize(false) {
+    autoResize(false),
+    blocksEnabled(false) {
     // 字体将由GameUI设置
 }
 
@@ -289,13 +290,50 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
     
     // 注意：不在渲染时调用autoSizeToContent，应该在设置内容时就调整好大小和位置
     
-    // 绘制半透明背景
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, opacity);
-    SDL_FRect bgRect = {x, y, width, height};
+    // 绘制浮雕阴影效果（在主窗口下方和右侧）
+    float shadowOffset = 4.0f;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    
+    // 底部阴影
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120);
+    SDL_FRect bottomShadow = {x + shadowOffset, y + height, width, shadowOffset};
+    SDL_RenderFillRect(renderer, &bottomShadow);
+    
+    // 右侧阴影
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120);
+    SDL_FRect rightShadow = {x + width, y + shadowOffset, shadowOffset, height};
+    SDL_RenderFillRect(renderer, &rightShadow);
+    
+    // 右下角阴影
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120);
+    SDL_FRect cornerShadow = {x + width, y + height, shadowOffset, shadowOffset};
+    SDL_RenderFillRect(renderer, &cornerShadow);
+    
+    // 绘制不透明背景
+    SDL_SetRenderDrawColor(renderer, 45, 45, 45, 255); // 深灰色不透明背景
+    SDL_FRect bgRect = {x, y, width, height};
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     SDL_RenderFillRect(renderer, &bgRect);
     
-    // 绘制边框
+    // 绘制浮雕效果的高光边框（左上）
+    SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255); // 浅色高光
+    // 顶部高光线
+    SDL_FRect topHighlight = {x, y, width, 2.0f};
+    SDL_RenderFillRect(renderer, &topHighlight);
+    // 左侧高光线
+    SDL_FRect leftHighlight = {x, y, 2.0f, height};
+    SDL_RenderFillRect(renderer, &leftHighlight);
+    
+    // 绘制浮雕效果的阴影边框（右下）
+    SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255); // 深色阴影
+    // 底部阴影线
+    SDL_FRect bottomHighlight = {x, y + height - 2.0f, width, 2.0f};
+    SDL_RenderFillRect(renderer, &bottomHighlight);
+    // 右侧阴影线
+    SDL_FRect rightHighlight = {x + width - 2.0f, y, 2.0f, height};
+    SDL_RenderFillRect(renderer, &rightHighlight);
+    
+    // 绘制主边框
     SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
     SDL_RenderRect(renderer, &bgRect);
     
@@ -389,19 +427,62 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
         // 添加元素的Y偏移量
         currentYOffset += element.getYOffset();
     }
+    
+    // 分析并创建UI块，然后渲染（如果启用）
+    if (blocksEnabled) {
+        analyzeAndCreateBlocks();
+        renderBlocks(renderer);
+    }
 }
 
 // 原始渲染方法（保持向后兼容）
 void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHeight) {
     if (!isVisible) return;
     
-    // 绘制半透明背景
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, opacity);
-    SDL_FRect bgRect = {x, y, width, height};
+    // 绘制浮雕阴影效果（在主窗口下方和右侧）
+    float shadowOffset = 4.0f;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    
+    // 底部阴影
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120);
+    SDL_FRect bottomShadow = {x + shadowOffset, y + height, width, shadowOffset};
+    SDL_RenderFillRect(renderer, &bottomShadow);
+    
+    // 右侧阴影
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120);
+    SDL_FRect rightShadow = {x + width, y + shadowOffset, shadowOffset, height};
+    SDL_RenderFillRect(renderer, &rightShadow);
+    
+    // 右下角阴影
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120);
+    SDL_FRect cornerShadow = {x + width, y + height, shadowOffset, shadowOffset};
+    SDL_RenderFillRect(renderer, &cornerShadow);
+    
+    // 绘制不透明背景
+    SDL_SetRenderDrawColor(renderer, 45, 45, 45, 255); // 深灰色不透明背景
+    SDL_FRect bgRect = {x, y, width, height};
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     SDL_RenderFillRect(renderer, &bgRect);
     
-    // 绘制边框
+    // 绘制浮雕效果的高光边框（左上）
+    SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255); // 浅色高光
+    // 顶部高光线
+    SDL_FRect topHighlight = {x, y, width, 2.0f};
+    SDL_RenderFillRect(renderer, &topHighlight);
+    // 左侧高光线
+    SDL_FRect leftHighlight = {x, y, 2.0f, height};
+    SDL_RenderFillRect(renderer, &leftHighlight);
+    
+    // 绘制浮雕效果的阴影边框（右下）
+    SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255); // 深色阴影
+    // 底部阴影线
+    SDL_FRect bottomHighlight = {x, y + height - 2.0f, width, 2.0f};
+    SDL_RenderFillRect(renderer, &bottomHighlight);
+    // 右侧阴影线
+    SDL_FRect rightHighlight = {x + width - 2.0f, y, 2.0f, height};
+    SDL_RenderFillRect(renderer, &rightHighlight);
+    
+    // 绘制主边框
     SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
     SDL_RenderRect(renderer, &bgRect);
     
@@ -477,6 +558,12 @@ void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHei
         float yOffsetRatio = getFontSizeRatio(element.getType());
         currentYOffset += element.getYOffset() * yOffsetRatio;
     }
+    
+    // 分析并创建UI块，然后渲染（如果启用）
+    if (blocksEnabled) {
+        analyzeAndCreateBlocks();
+        renderBlocks(renderer);
+    }
 }
 
 float UIWindow::getFontSizeRatio(UIElementType type) const {
@@ -512,6 +599,153 @@ void UIWindow::renderElementBorders(SDL_Renderer* renderer, SDL_Color borderColo
             rect.y,
             rect.width,
             rect.height
+        };
+        SDL_RenderRect(renderer, &borderRect);
+    }
+    
+    // 恢复渲染器状态
+    SDL_SetRenderDrawColor(renderer, originalColor.r, originalColor.g, originalColor.b, originalColor.a);
+    SDL_SetRenderDrawBlendMode(renderer, originalBlendMode);
+}
+
+// UI块管理方法实现
+void UIWindow::clearBlocks() {
+    uiBlocks.clear();
+}
+
+void UIWindow::addBlock(const std::string& name, float topY, float bottomY,
+                        SDL_Color backgroundColor, SDL_Color borderColor) {
+    UIBlock block;
+    block.name = name;
+    block.topY = topY;
+    block.bottomY = bottomY;
+    block.backgroundColor = backgroundColor;
+    block.borderColor = borderColor;
+    uiBlocks.push_back(block);
+}
+
+void UIWindow::analyzeAndCreateBlocks() {
+    if (!isVisible || !blocksEnabled) return;
+    
+    // 清空现有块
+    clearBlocks();
+    
+    // 当前处理的块
+    std::string currentBlockName = "";
+    float currentBlockTopY = 0.0f;
+    SDL_Color currentBackgroundColor = {0, 0, 0, 0};
+    SDL_Color currentBorderColor = {0, 0, 0, 0};
+    
+    // 遍历所有元素，根据内容识别逻辑块
+    for (size_t i = 0; i < elements.size(); ++i) {
+        const auto& element = elements[i];
+        
+        // 获取元素的渲染区域
+        ElementRenderRect rect;
+        if (!getElementRect(i, rect)) {
+            continue;
+        }
+        
+        // 根据元素文本内容识别块边界
+        std::string text = element.getText();
+        
+        // 检查是否是新块的开始
+        bool isNewBlockStart = false;
+        std::string newBlockName = "";
+        SDL_Color newBackgroundColor = {0, 0, 0, 0};
+        SDL_Color newBorderColor = {0, 0, 0, 0};
+        
+        if (text == "玩家背包" && element.getType() == UIElementType::TITLE) {
+            // 标题块
+            isNewBlockStart = true;
+            newBlockName = "标题";
+            newBackgroundColor = {35, 35, 65, 255}; // 不透明深蓝背景
+            newBorderColor = {80, 80, 120, 255};
+        }
+        else if (text == "手持物品" && element.getType() == UIElementType::SUBTITLE) {
+            // 手持物品块
+            isNewBlockStart = true;
+            newBlockName = "手持物品";
+            newBackgroundColor = {65, 35, 35, 255}; // 不透明深红背景
+            newBorderColor = {120, 80, 80, 255};
+        }
+        else if (text == "已装备物品:" && element.getType() == UIElementType::SUBTITLE) {
+            // 已装备物品块
+            isNewBlockStart = true;
+            newBlockName = "已装备物品";
+            newBackgroundColor = {35, 65, 35, 255}; // 不透明深绿背景
+            newBorderColor = {80, 120, 80, 255};
+        }
+        else if (text == "背包物品:" && element.getType() == UIElementType::SUBTITLE) {
+            // 背包物品块
+            isNewBlockStart = true;
+            newBlockName = "背包物品";
+            newBackgroundColor = {65, 65, 35, 255}; // 不透明深黄背景
+            newBorderColor = {120, 120, 80, 255};
+        }
+        
+        // 如果检测到新块开始，先完成当前块（如果有）
+        if (isNewBlockStart && !currentBlockName.empty()) {
+            // 完成当前块，使用当前元素的顶部作为当前块的底部
+            float blockPadding = 5.0f;
+            addBlock(currentBlockName, 
+                    currentBlockTopY - blockPadding, 
+                    rect.y - blockPadding,
+                    currentBackgroundColor, currentBorderColor);
+        }
+        
+        // 开始新块
+        if (isNewBlockStart) {
+            currentBlockName = newBlockName;
+            currentBlockTopY = rect.y;
+            currentBackgroundColor = newBackgroundColor;
+            currentBorderColor = newBorderColor;
+        }
+    }
+    
+    // 完成最后一个块（如果有）
+    if (!currentBlockName.empty()) {
+        float blockPadding = 5.0f;
+        addBlock(currentBlockName, 
+                currentBlockTopY - blockPadding, 
+                y + height - blockPadding,
+                currentBackgroundColor, currentBorderColor);
+    }
+}
+
+void UIWindow::renderBlocks(SDL_Renderer* renderer) {
+    if (!isVisible || !blocksEnabled || uiBlocks.empty()) return;
+    
+    // 保存当前渲染器状态
+    SDL_Color originalColor;
+    SDL_GetRenderDrawColor(renderer, &originalColor.r, &originalColor.g, &originalColor.b, &originalColor.a);
+    SDL_BlendMode originalBlendMode;
+    SDL_GetRenderDrawBlendMode(renderer, &originalBlendMode);
+    
+    // 设置混合模式
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    
+    // 渲染每个块
+    for (const auto& block : uiBlocks) {
+        // 绘制背景
+        SDL_SetRenderDrawColor(renderer, block.backgroundColor.r, block.backgroundColor.g, 
+                              block.backgroundColor.b, block.backgroundColor.a);
+        SDL_FRect bgRect = {
+            x + 5.0f, // 添加左边距
+            block.topY,
+            width - 10.0f, // 减去左右边距
+            block.bottomY - block.topY
+        };
+        SDL_RenderFillRect(renderer, &bgRect);
+        
+        // 绘制边框
+        SDL_SetRenderDrawColor(renderer, block.borderColor.r, block.borderColor.g, 
+                              block.borderColor.b, block.borderColor.a);
+        SDL_FRect borderRect = {
+            x + 5.0f, // 添加左边距
+            block.topY,
+            width - 10.0f, // 减去左右边距
+            block.bottomY - block.topY
         };
         SDL_RenderRect(renderer, &borderRect);
     }

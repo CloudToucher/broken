@@ -512,6 +512,9 @@ void GameUI::updatePlayerUI(Player* player) {
         UIElement storageSpacer("", 0.0f, 15.0f, {0, 0, 0, 0}, UIElementType::TEXT);
         currentWindow->addElement(storageSpacer);
     }
+    
+    // 启用块显示功能
+    currentWindow->setBlocksEnabled(true);
 
 }
 
