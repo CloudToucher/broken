@@ -119,7 +119,7 @@ std::vector<WrappedTextLine> UIWindow::wrapText(const std::string& text, TTF_Fon
 LayoutCalculationResult UIWindow::calculateLayout() const {
     LayoutCalculationResult result;
     result.totalWidth = 0.0f;
-    result.totalHeight = padding * 1.5f; // 现代简约风格 - 增加顶部间距
+    result.totalHeight = padding; // 游戏简约风格 - 标准顶部间距
     result.elementLines.clear();
     
     for (const auto& element : elements) {
@@ -149,20 +149,20 @@ LayoutCalculationResult UIWindow::calculateLayout() const {
             result.totalWidth = std::max(result.totalWidth, line.width + element.getXOffset());
         }
         
-        // 累加高度 - 现代简约风格的行间距
+        // 累加高度 - 游戏简约风格的标准间距
         for (const auto& line : lines) {
-            result.totalHeight += line.height + 2.0f; // 增加行间距
+            result.totalHeight += line.height;
         }
         
-        // 添加元素的Y偏移量 - 现代简约风格的元素间距
-        result.totalHeight += element.getYOffset() + 4.0f;
+        // 添加元素的Y偏移量
+        result.totalHeight += element.getYOffset();
     }
     
-    // 现代简约风格 - 增加底部间距
-    result.totalHeight += padding * 1.8f;
+    // 游戏简约风格 - 标准底部间距
+    result.totalHeight += padding;
     
-    // 确保最小宽度包含左右边距 - 现代简约风格的更宽边距
-    result.totalWidth = std::max(result.totalWidth + padding * 2.4f, 220.0f);
+    // 确保最小宽度包含左右边距
+    result.totalWidth = std::max(result.totalWidth + 2 * padding, 200.0f);
     
     return result;
 }
@@ -288,46 +288,27 @@ void UIWindow::update() {
 void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, float windowHeight) {
     if (!isVisible) return;
     
-    // 注意：不在渲染时调用autoSizeToContent，应该在设置内容时就调整好大小和位置
-    
-    // 现代简约风格 - 主窗口背景（深色主题）
-    SDL_SetRenderDrawColor(renderer, 28, 28, 30, 255); // 现代深色背景
+    // 游戏简约风格 - 主窗口背景
+    SDL_SetRenderDrawColor(renderer, 32, 32, 34, 255); // 游戏风格深色背景
     SDL_FRect bgRect = {x, y, width, height};
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     SDL_RenderFillRect(renderer, &bgRect);
     
-    // 现代简约风格 - 优雅的外部阴影（卡片式设计）
+    // 游戏简约风格 - 简洁的投影阴影
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    float shadowOffset = 8.0f;
-    float shadowBlur = 12.0f;
     
-    // 创建多层柔和阴影效果
-    for (int i = 0; i < shadowBlur; i++) {
-        float progress = (float)i / shadowBlur;
-        Uint8 alpha = (Uint8)(25 * (1.0f - progress * progress)); // 二次衰减
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, alpha);
-        
-        SDL_FRect shadowRect = {
-            x + shadowOffset * progress * 0.5f,
-            y + shadowOffset * progress,
-            width - shadowOffset * progress,
-            height - shadowOffset * progress
-        };
-        SDL_RenderFillRect(renderer, &shadowRect);
-    }
+    // 简单的单层阴影，更适合游戏风格
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 40);
+    SDL_FRect simpleShadow = {x + 3.0f, y + 3.0f, width, height};
+    SDL_RenderFillRect(renderer, &simpleShadow);
     
-    // 现代简约风格 - 精致的窗口边框
-    SDL_SetRenderDrawColor(renderer, 58, 58, 62, 255); // 现代灰色边框
+    // 游戏简约风格 - 清晰的窗口边框
+    SDL_SetRenderDrawColor(renderer, 64, 64, 68, 255); // 游戏风格边框
     SDL_FRect borderRect = {x - 1, y - 1, width + 2, height + 2};
     SDL_RenderRect(renderer, &borderRect);
     
-    // 内部高光边框（非常精致）
-    SDL_SetRenderDrawColor(renderer, 68, 68, 75, 255);
-    SDL_FRect innerBorder = {x, y, width, height};
-    SDL_RenderRect(renderer, &innerBorder);
-    
     // 重置Y轴累计偏移量
-    currentYOffset = padding * 1.5f; // 增加顶部间距
+    currentYOffset = padding; // 使用标准间距
     
     // 清空元素渲染区域映射
     elementRects.clear();
@@ -367,8 +348,9 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
         for (const auto& line : lines) {
             if (line.text.empty()) {
                 // 空行，只增加高度
-                currentYOffset += line.height;
-                elementTotalHeight += line.height;
+                float lineHeight = calculateTextHeight(font);
+                currentYOffset += lineHeight;
+                elementTotalHeight += lineHeight;
                 continue;
             }
             
@@ -378,9 +360,9 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
                 // 创建纹理
                 SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
                 if (textTexture) {
-                    // 计算渲染位置（增加左边距）
+                    // 计算渲染位置
                     SDL_FRect renderRect = {
-                        x + padding * 1.2f + element.getXOffset(),
+                        x + padding + element.getXOffset(),
                         y + currentYOffset,
                         static_cast<float>(textSurface->w),
                         static_cast<float>(textSurface->h)
@@ -392,6 +374,10 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
                     // 更新元素最大宽度
                     elementMaxWidth = std::max(elementMaxWidth, renderRect.w);
                     
+                    // 更新高度
+                    elementTotalHeight += renderRect.h;
+                    currentYOffset += renderRect.h;
+                    
                     // 释放纹理
                     SDL_DestroyTexture(textTexture);
                 }
@@ -399,22 +385,18 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
                 // 释放表面
                 SDL_DestroySurface(textSurface);
             }
-            
-            // 移动到下一行（增加行间距）
-            currentYOffset += line.height + 2.0f;
-            elementTotalHeight += line.height + 2.0f;
         }
         
         // 存储整个元素的渲染区域（包含所有行）
         elementRects[i] = {
-            x + padding * 1.2f + element.getXOffset(),
+            x + padding + element.getXOffset(),
             y + elementStartY,
             elementMaxWidth,
             elementTotalHeight
         };
         
-        // 添加元素的Y偏移量（增加元素间距）
-        currentYOffset += element.getYOffset() + 4.0f;
+        // 添加元素的Y偏移量
+        currentYOffset += element.getYOffset();
     }
     
     // 分析并创建UI块，然后先渲染背景块（如果启用）
@@ -423,6 +405,9 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
         renderBlocks(renderer);
         
         // 重新渲染所有文本元素（在背景块之上）
+        // 重置Y偏移量以保持一致性
+        currentYOffset = padding;
+        
         for (size_t i = 0; i < elements.size() && i < layout.elementLines.size(); ++i) {
             const auto& element = elements[i];
             const auto& lines = layout.elementLines[i];
@@ -445,18 +430,12 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
             // 确保字体已加载
             if (!font) continue;
             
-            // 获取已记录的元素渲染区域
-            auto rectIt = elementRects.find(i);
-            if (rectIt == elementRects.end()) continue;
-            
-            const ElementRenderRect& elementRect = rectIt->second;
-            float elementCurrentY = elementRect.y;
-            
-            // 重新渲染每一行
+            // 重新渲染每一行，保持与第一次渲染的一致性
             for (const auto& line : lines) {
                 if (line.text.empty()) {
                     // 空行，只增加高度
-                    elementCurrentY += line.height + 2.0f;
+                    float lineHeight = calculateTextHeight(font);
+                    currentYOffset += lineHeight;
                     continue;
                 }
                 
@@ -466,16 +445,19 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
                     // 创建纹理
                     SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
                     if (textTexture) {
-                        // 计算渲染位置
+                        // 计算渲染位置（与第一次渲染保持一致）
                         SDL_FRect renderRect = {
-                            x + padding * 1.2f + element.getXOffset(),
-                            elementCurrentY,
+                            x + padding + element.getXOffset(),
+                            y + currentYOffset,
                             static_cast<float>(textSurface->w),
                             static_cast<float>(textSurface->h)
                         };
                         
                         // 渲染文本
                         SDL_RenderTexture(renderer, textTexture, nullptr, &renderRect);
+                        
+                        // 更新Y偏移量
+                        currentYOffset += renderRect.h;
                         
                         // 释放纹理
                         SDL_DestroyTexture(textTexture);
@@ -484,54 +466,37 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
                     // 释放表面
                     SDL_DestroySurface(textSurface);
                 }
-                
-                // 移动到下一行
-                elementCurrentY += line.height + 2.0f;
             }
+            
+            // 添加元素的Y偏移量
+            currentYOffset += element.getYOffset();
         }
     }
 }
 
-// 现代简约风格 - 原始渲染方法更新
+// 游戏简约风格 - 原始渲染方法更新
 void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHeight) {
     if (!isVisible) return;
     
-    // 现代简约风格 - 主窗口背景
-    SDL_SetRenderDrawColor(renderer, 28, 28, 30, 255); // 现代深色背景
+    // 游戏简约风格 - 主窗口背景
+    SDL_SetRenderDrawColor(renderer, 32, 32, 34, 255); // 游戏风格深色背景
     SDL_FRect bgRect = {x, y, width, height};
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     SDL_RenderFillRect(renderer, &bgRect);
     
-    // 现代简约风格 - 优雅的外部阴影
+    // 游戏简约风格 - 简洁的投影阴影
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    float shadowOffset = 8.0f;
-    float shadowBlur = 12.0f;
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 40);
+    SDL_FRect simpleShadow = {x + 3.0f, y + 3.0f, width, height};
+    SDL_RenderFillRect(renderer, &simpleShadow);
     
-    for (int i = 0; i < shadowBlur; i++) {
-        float progress = (float)i / shadowBlur;
-        Uint8 alpha = (Uint8)(25 * (1.0f - progress * progress));
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, alpha);
-        
-        SDL_FRect shadowRect = {
-            x + shadowOffset * progress * 0.5f,
-            y + shadowOffset * progress,
-            width - shadowOffset * progress,
-            height - shadowOffset * progress
-        };
-        SDL_RenderFillRect(renderer, &shadowRect);
-    }
-    
-    // 现代简约风格 - 精致的窗口边框
-    SDL_SetRenderDrawColor(renderer, 58, 58, 62, 255);
+    // 游戏简约风格 - 清晰的窗口边框
+    SDL_SetRenderDrawColor(renderer, 64, 64, 68, 255);
     SDL_FRect borderRect = {x - 1, y - 1, width + 2, height + 2};
     SDL_RenderRect(renderer, &borderRect);
     
-    SDL_SetRenderDrawColor(renderer, 68, 68, 75, 255);
-    SDL_FRect innerBorder = {x, y, width, height};
-    SDL_RenderRect(renderer, &innerBorder);
-    
     // 重置Y轴累计偏移量
-    currentYOffset = padding * 1.5f; // 增加顶部间距
+    currentYOffset = padding; // 使用标准间距
     
     // 清空元素渲染区域映射
     elementRects.clear();
@@ -609,7 +574,7 @@ void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHei
         renderBlocks(renderer);
         
         // 重新渲染所有文本元素（在背景块之上）
-        currentYOffset = padding * 1.5f; // 重置Y偏移量
+        currentYOffset = padding; // 重置Y偏移量
         
         for (size_t i = 0; i < elements.size(); ++i) {
             const auto& element = elements[i];
@@ -756,38 +721,38 @@ void UIWindow::analyzeAndCreateBlocks() {
         SDL_Color newBorderColor = {0, 0, 0, 0};
         
         if (text == "玩家背包" && element.getType() == UIElementType::TITLE) {
-            // 现代简约风格 - 标题块（优雅蓝色）
+            // 游戏简约风格 - 标题块（淡蓝色）
             isNewBlockStart = true;
             newBlockName = "标题";
-            newBackgroundColor = {45, 52, 65, 255}; // 现代蓝灰色
+            newBackgroundColor = {48, 52, 64, 200}; // 游戏风格淡蓝灰色
             newBorderColor = {72, 85, 106, 255};
         }
         else if (text == "手持物品" && element.getType() == UIElementType::SUBTITLE) {
-            // 现代简约风格 - 手持物品块（温暖强调色）
+            // 游戏简约风格 - 手持物品块（淡橙色）
             isNewBlockStart = true;
             newBlockName = "手持物品";
-            newBackgroundColor = {65, 45, 52, 255}; // 现代红灰色
-            newBorderColor = {106, 72, 85, 255};
+            newBackgroundColor = {64, 52, 48, 200}; // 游戏风格淡橙灰色
+            newBorderColor = {106, 85, 72, 255};
         }
         else if (text == "已装备物品:" && element.getType() == UIElementType::SUBTITLE) {
-            // 现代简约风格 - 已装备物品块（自然绿色）
+            // 游戏简约风格 - 已装备物品块（淡绿色）
             isNewBlockStart = true;
             newBlockName = "已装备物品";
-            newBackgroundColor = {45, 65, 52, 255}; // 现代绿灰色
+            newBackgroundColor = {48, 64, 52, 200}; // 游戏风格淡绿灰色
             newBorderColor = {72, 106, 85, 255};
         }
         else if (text == "背包物品:" && element.getType() == UIElementType::SUBTITLE) {
-            // 现代简约风格 - 背包物品块（金色强调）
+            // 游戏简约风格 - 背包物品块（淡黄色）
             isNewBlockStart = true;
             newBlockName = "背包物品";
-            newBackgroundColor = {65, 58, 45, 255}; // 现代金灰色
-            newBorderColor = {106, 95, 72, 255};
+            newBackgroundColor = {64, 60, 48, 200}; // 游戏风格淡黄灰色
+            newBorderColor = {106, 100, 72, 255};
         }
         
         // 如果检测到新块开始，先完成当前块（如果有）
         if (isNewBlockStart && !currentBlockName.empty()) {
             // 完成当前块，使用当前元素的顶部作为当前块的底部
-            float blockPadding = 12.0f; // 增加块间距
+            float blockPadding = 8.0f; // 游戏风格适中间距
             addBlock(currentBlockName, 
                     currentBlockTopY - blockPadding, 
                     rect.y - blockPadding,
@@ -805,10 +770,10 @@ void UIWindow::analyzeAndCreateBlocks() {
     
     // 完成最后一个块（如果有）
     if (!currentBlockName.empty()) {
-        float blockPadding = 12.0f;
+        float blockPadding = 8.0f;
         addBlock(currentBlockName, 
                 currentBlockTopY - blockPadding, 
-                y + height - blockPadding * 2,
+                y + height - blockPadding,
                 currentBackgroundColor, currentBorderColor);
     }
 }
@@ -825,60 +790,35 @@ void UIWindow::renderBlocks(SDL_Renderer* renderer) {
     // 设置混合模式
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     
-    // 渲染每个块 - 现代简约风格
+    // 渲染每个块 - 游戏简约风格
     for (const auto& block : uiBlocks) {
-        float blockX = x + 12.0f; // 增加左右边距
+        float blockX = x + 8.0f; // 游戏风格适中边距
         float blockY = block.topY;
-        float blockWidth = width - 24.0f; // 相应减少宽度
+        float blockWidth = width - 16.0f;
         float blockHeight = block.bottomY - block.topY;
         
-        // 1. 现代简约风格 - 优雅的卡片阴影
-        float shadowOffset = 4.0f;
-        float shadowBlur = 8.0f;
+        // 1. 游戏简约风格 - 简单的块阴影
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 25);
+        SDL_FRect blockShadow = {blockX + 2.0f, blockY + 2.0f, blockWidth, blockHeight};
+        SDL_RenderFillRect(renderer, &blockShadow);
         
-        for (int i = 0; i < shadowBlur; i++) {
-            float progress = (float)i / shadowBlur;
-            Uint8 alpha = (Uint8)(15 * (1.0f - progress)); // 更加轻柔的阴影
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, alpha);
-            
-            SDL_FRect shadowRect = {
-                blockX + shadowOffset * progress * 0.3f,
-                blockY + shadowOffset * progress * 0.8f,
-                blockWidth - shadowOffset * progress * 0.2f,
-                blockHeight - shadowOffset * progress * 0.4f
-            };
-            SDL_RenderFillRect(renderer, &shadowRect);
-        }
-        
-        // 2. 现代简约风格 - 主背景（卡片式）
+        // 2. 游戏简约风格 - 主背景
         SDL_SetRenderDrawColor(renderer, block.backgroundColor.r, block.backgroundColor.g, 
                               block.backgroundColor.b, block.backgroundColor.a);
         SDL_FRect bgRect = {blockX, blockY, blockWidth, blockHeight};
         SDL_RenderFillRect(renderer, &bgRect);
         
-        // 3. 现代简约风格 - 精致的顶部高光
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 8); // 非常轻微的高光
-        SDL_FRect topHighlight = {blockX, blockY, blockWidth, blockHeight * 0.4f};
-        SDL_RenderFillRect(renderer, &topHighlight);
-        
-        // 4. 现代简约风格 - 左侧强调边框
-        SDL_SetRenderDrawColor(renderer, block.borderColor.r + 30, block.borderColor.g + 30, 
-                              block.borderColor.b + 30, 180);
-        SDL_FRect accentLine = {blockX, blockY + 2.0f, 3.0f, blockHeight - 4.0f};
-        SDL_RenderFillRect(renderer, &accentLine);
-        
-        // 5. 现代简约风格 - 简洁的外边框
+        // 3. 游戏简约风格 - 简洁的边框
         SDL_SetRenderDrawColor(renderer, block.borderColor.r, block.borderColor.g, 
-                              block.borderColor.b, 120);
-        SDL_FRect outerBorder = {blockX, blockY, blockWidth, blockHeight};
-        SDL_RenderRect(renderer, &outerBorder);
+                              block.borderColor.b, 150);
+        SDL_FRect borderRect = {blockX, blockY, blockWidth, blockHeight};
+        SDL_RenderRect(renderer, &borderRect);
         
-        // 6. 现代简约风格 - 底部分割线（可选的设计元素）
-        if (&block != &uiBlocks.back()) { // 不是最后一个块
-            SDL_SetRenderDrawColor(renderer, 68, 68, 75, 60);
-            SDL_FRect separatorLine = {blockX + 8.0f, blockY + blockHeight + 6.0f, blockWidth - 16.0f, 1.0f};
-            SDL_RenderFillRect(renderer, &separatorLine);
-        }
+        // 4. 游戏简约风格 - 左侧强调线
+        SDL_SetRenderDrawColor(renderer, block.borderColor.r + 20, block.borderColor.g + 20, 
+                              block.borderColor.b + 20, 200);
+        SDL_FRect accentLine = {blockX + 1.0f, blockY + 2.0f, 2.0f, blockHeight - 4.0f};
+        SDL_RenderFillRect(renderer, &accentLine);
     }
     
     // 恢复渲染器状态
