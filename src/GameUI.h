@@ -7,11 +7,10 @@
 #include <memory>
 #include <iostream>
 #include "UIWindow.h"
-#include "Item.h"
+#include "Item.h" // 包含Item.h以获取EquipSlot枚举
 
 class Game;
 class Player;
-class Item;
 class Storage;
 
 // 使用UIWindow替代原来的ItemTooltip结构
@@ -23,6 +22,15 @@ struct StorageCoordinates {
     float bottomRightX;
     float bottomRightY;
     Storage* storage;
+};
+
+// 装备槽位坐标范围结构体
+struct EquipSlotCoordinates {
+    float topLeftX;
+    float topLeftY;
+    float bottomRightX;
+    float bottomRightY;
+    EquipSlot slot;
 };
 
 class GameUI {
@@ -71,17 +79,12 @@ private:
     // 存储空间坐标映射
     std::vector<StorageCoordinates> storageCoordinatesMap; // 存储空间坐标范围映射
     
+    // 装备槽位坐标映射
+    std::vector<EquipSlotCoordinates> equipSlotCoordinatesMap; // 装备槽位坐标范围映射
+    
     // 手持位坐标（动态计算）
     ElementRenderRect handSlotRect; // 手持位元素的渲染区域
     bool handSlotRectValid; // 手持位坐标是否有效
-    
-    // 装备槽位坐标（动态计算）
-    struct EquipSlotCoordinates {
-        EquipSlot slot;                // 装备槽位类型
-        ElementRenderRect rect;        // 槽位元素的渲染区域
-        bool isValid;                  // 坐标是否有效
-    };
-    std::vector<EquipSlotCoordinates> equipSlotCoordinates; // 装备槽位坐标映射
     
     // 待处理的物品信息（用于存储选择确认框）
     Item* pendingHeldItemToReplace;                    // 待替换的手持物品
@@ -119,14 +122,11 @@ private:
     // 更新存储空间坐标映射
     void updateStorageCoordinatesMap();
     
+    // 更新装备槽位坐标映射
+    void updateEquipmentCoordinatesMap();
+    
     // 更新手持位坐标
     void updateHandSlotRect();
-    
-    // 更新装备槽位坐标
-    void updateEquipSlotCoordinates();
-    
-    // 检测拖拽位置是否在装备槽位上，返回槽位类型
-    EquipSlot detectEquipSlotAtPosition(int mouseX, int mouseY);
     
     // 确认对话框相关方法
     void showConfirmationDialog(const std::string& title, const std::string& message, 
@@ -184,6 +184,9 @@ public:
     
     // 根据坐标查找对应元素所属的Storage
     Storage* findStorageByCoordinates(int x, int y);
+    
+    // 根据坐标查找对应的装备槽位
+    EquipSlot findEquipSlotByCoordinates(int x, int y);
     
     // 测试方法（可以通过按键触发）
     void testConfirmationDialog() {

@@ -512,7 +512,7 @@ void GameUI::updatePlayerUI(Player* player) {
         UIElement storageSpacer("", 0.0f, 15.0f, {0, 0, 0, 0}, UIElementType::TEXT);
         currentWindow->addElement(storageSpacer);
     }
-    
+
     // 启用块显示功能
     currentWindow->setBlocksEnabled(true);
 
@@ -544,9 +544,6 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
                 
                 // 更新手持位坐标
                 updateHandSlotRect();
-        
-        // 更新装备槽位坐标
-        updateEquipSlotCoordinates();
         
         // 如果正在拖拽物品，显示可以容纳该物品的存储空间的绿色边框
         if (isDragging && draggedItem) {            
@@ -600,6 +597,57 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
                     // 绘制顶部和底部边框
                     SDL_RenderFillRect(renderer, &topBorder);
                     SDL_RenderFillRect(renderer, &bottomBorder);
+                }
+            }
+                    
+            // 绘制装备槽位边框（只有在可穿戴物品且来自存储空间时才显示）
+            if (sourceStorage && draggedItem && draggedItem->isWearable()) {
+                // 更新装备槽位坐标映射
+                updateEquipmentCoordinatesMap();
+                
+                // 遍历所有装备槽位，显示可以装备的槽位
+                for (const auto& coords : equipSlotCoordinatesMap) {
+                    // 检查物品是否可以装备到该槽位
+                    if (draggedItem->canEquipToSlot(coords.slot)) {
+                        // 设置蓝色边框表示可装备的槽位
+                        SDL_SetRenderDrawColor(renderer, 100, 150, 255, 255); // 淡蓝色
+                        
+                        // 绘制边框（左右两侧）
+                        SDL_FRect leftBorder = {
+                            coords.topLeftX,
+                            coords.topLeftY,
+                            3.0f,
+                            coords.bottomRightY - coords.topLeftY
+                        };
+                        
+                        SDL_FRect rightBorder = {
+                            coords.bottomRightX - 3.0f,
+                            coords.topLeftY,
+                            3.0f,
+                            coords.bottomRightY - coords.topLeftY
+                        };
+                        
+                        // 绘制顶部和底部边框
+                        SDL_FRect topBorder = {
+                            coords.topLeftX,
+                            coords.topLeftY,
+                            coords.bottomRightX - coords.topLeftX,
+                            3.0f
+                        };
+                        
+                        SDL_FRect bottomBorder = {
+                            coords.topLeftX,
+                            coords.bottomRightY - 3.0f,
+                            coords.bottomRightX - coords.topLeftX,
+                            3.0f
+                        };
+                        
+                        // 绘制边框
+                        SDL_RenderFillRect(renderer, &leftBorder);
+                        SDL_RenderFillRect(renderer, &rightBorder);
+                        SDL_RenderFillRect(renderer, &topBorder);
+                        SDL_RenderFillRect(renderer, &bottomBorder);
+                    }
                 }
             }
                     
@@ -1558,6 +1606,130 @@ void GameUI::updateStorageCoordinatesMap() {
     }
 }
 
+void GameUI::updateEquipmentCoordinatesMap() {
+    // 清空现有装备槽位映射
+    equipSlotCoordinatesMap.clear();
+    
+    // 检查玩家窗口是否存在且在装备栏标签页
+    if (!isUIVisible || currentTab != TabType::EQUIPMENT || !currentPlayer) {
+        return;
+    }
+    
+    UIWindow* currentWindow = getCurrentTabWindow();
+    if (!currentWindow) {
+        return;
+    }
+    
+    // 获取装备系统
+    EquipmentSystem* equipSystem = currentPlayer->getEquipmentSystem();
+    if (!equipSystem) {
+        return;
+    }
+    
+    // 获取所有UI元素
+    const auto& elements = currentWindow->getElements();
+    
+    // 定义所有需要处理的装备槽位（与UI生成时的顺序保持一致）
+    std::vector<EquipSlot> allSlots = {
+        EquipSlot::HEAD,
+        EquipSlot::EYES,
+        EquipSlot::CHEST,
+        EquipSlot::ABDOMEN,
+        EquipSlot::LEFT_LEG,
+        EquipSlot::RIGHT_LEG,
+        EquipSlot::LEFT_FOOT,
+        EquipSlot::RIGHT_FOOT,
+        EquipSlot::LEFT_ARM,
+        EquipSlot::RIGHT_ARM,
+        EquipSlot::LEFT_HAND,
+        EquipSlot::RIGHT_HAND,
+        EquipSlot::BACK
+    };
+    
+    // 将槽位名称映射，与UI生成时保持一致
+    auto getSlotName = [](EquipSlot slot) -> std::string {
+        switch (slot) {
+            case EquipSlot::HEAD: return "头部";
+            case EquipSlot::EYES: return "眼部";
+            case EquipSlot::CHEST: return "胸部";
+            case EquipSlot::ABDOMEN: return "腹部";
+            case EquipSlot::LEFT_LEG: return "左腿";
+            case EquipSlot::RIGHT_LEG: return "右腿";
+            case EquipSlot::LEFT_FOOT: return "左脚";
+            case EquipSlot::RIGHT_FOOT: return "右脚";
+            case EquipSlot::LEFT_ARM: return "左臂";
+            case EquipSlot::RIGHT_ARM: return "右臂";
+            case EquipSlot::LEFT_HAND: return "左手";
+            case EquipSlot::RIGHT_HAND: return "右手";
+            case EquipSlot::BACK: return "背部";
+            default: return "未知";
+        }
+    };
+    
+    // 遍历UI元素，查找装备槽位标签
+    for (size_t i = 0; i < elements.size() && !allSlots.empty(); ++i) {
+        const auto& element = elements[i];
+        
+        // 检查是否是装备槽位标签（以"：" 结尾）
+        std::string text = element.getText();
+        if (text.length() < 3 || text.substr(text.length() - 2) != "：") {
+            continue;
+        }
+        
+        // 提取槽位名称（去掉最后的"："）
+        std::string slotName = text.substr(0, text.length() - 2);
+        
+        // 查找匹配的槽位
+        EquipSlot matchedSlot = EquipSlot::NONE;
+        for (auto slot : allSlots) {
+            if (getSlotName(slot) == slotName) {
+                matchedSlot = slot;
+                break;
+            }
+        }
+        
+        // 如果找到匹配的槽位，计算坐标范围
+        if (matchedSlot != EquipSlot::NONE) {
+            // 获取当前槽位标签元素的渲染区域
+            ElementRenderRect slotRect;
+            if (currentWindow->getElementRect(i, slotRect)) {
+                // 查找下一个槽位标签或其他分界元素，确定当前槽位的Y范围
+                float slotEndY = slotRect.y + slotRect.height;
+                
+                // 向后查找，找到下一个槽位标签或重要分界线
+                for (size_t j = i + 1; j < elements.size(); ++j) {
+                    const auto& nextElement = elements[j];
+                    std::string nextText = nextElement.getText();
+                    
+                    // 如果是下一个槽位标签（以"：" 结尾）或重要分界线（"背包物品:"等）
+                    if ((nextText.length() >= 3 && nextText.substr(nextText.length() - 2) == "：") ||
+                        nextText.find("背包物品:") != std::string::npos ||
+                        nextText.find("手持物品") != std::string::npos) {
+                        ElementRenderRect nextRect;
+                        if (currentWindow->getElementRect(j, nextRect)) {
+                            slotEndY = nextRect.y;
+                            break;
+                        }
+                    }
+                }
+                
+                // 创建装备槽位坐标映射
+                EquipSlotCoordinates coords;
+                coords.topLeftX = currentWindow->getX();
+                coords.topLeftY = slotRect.y;
+                coords.bottomRightX = currentWindow->getX() + currentWindow->getWidth();
+                coords.bottomRightY = slotEndY;
+                coords.slot = matchedSlot;
+                
+                equipSlotCoordinatesMap.push_back(coords);
+                
+                // 从待处理列表中移除这个槽位
+                allSlots.erase(std::remove(allSlots.begin(), allSlots.end(), matchedSlot), allSlots.end());
+            }
+        }
+    }
+}
+
 bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float windowWidth, float windowHeight) {
     // 如果任何模态对话框可见，阻止拖拽操作
     if (isConfirmationVisible) {
@@ -1582,6 +1754,10 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     if (player) {
         currentPlayer = player;
     }
+
+    // 更新坐标映射
+    updateStorageCoordinatesMap();
+    updateEquipmentCoordinatesMap();
 
     // 查找鼠标释放位置对应的存储空间
     Storage* targetStorage = findStorageByCoordinates(mouseX, mouseY);
@@ -1649,8 +1825,11 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     }
         
         // 检查是否拖拽到装备位置，并确定具体的装备槽位
-        targetEquipSlot = detectEquipSlotAtPosition(mouseX, mouseY);
-        droppedOnEquipmentSlot = (targetEquipSlot != EquipSlot::NONE);
+        targetEquipSlot = findEquipSlotByCoordinates(mouseX, mouseY);
+        if (targetEquipSlot != EquipSlot::NONE) {
+            droppedOnEquipmentSlot = true;
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到装备槽位: %d", static_cast<int>(targetEquipSlot));
+        }
     
     // 如果拖拽到装备位置
     if (droppedOnEquipmentSlot && !isEquippedItem && !isHeldItem && sourceStorage) {
@@ -2450,147 +2629,28 @@ void GameUI::updateSkillsUI() {
     }
 }
 
-void GameUI::updateEquipSlotCoordinates() {
-    // 清空现有的装备槽位坐标
-    equipSlotCoordinates.clear();
-    
-    // 检查玩家窗口是否存在且在装备栏标签页
+EquipSlot GameUI::findEquipSlotByCoordinates(int x, int y) {
+    // 检查玩家UI是否可见且在装备栏标签页
     if (!isUIVisible || currentTab != TabType::EQUIPMENT || !currentPlayer) {
-        return;
+        return EquipSlot::NONE;
     }
     
     UIWindow* currentWindow = getCurrentTabWindow();
     if (!currentWindow) {
-        return;
+        return EquipSlot::NONE;
     }
     
-    // 获取所有UI元素
-    const auto& elements = currentWindow->getElements();
-    
-    // 定义所有装备槽位的顺序（与updatePlayerUI中的顺序一致）
-    std::vector<EquipSlot> allSlots = {
-        EquipSlot::HEAD,
-        EquipSlot::EYES,
-        EquipSlot::CHEST,
-        EquipSlot::ABDOMEN,
-        EquipSlot::LEFT_LEG,
-        EquipSlot::RIGHT_LEG,
-        EquipSlot::LEFT_FOOT,
-        EquipSlot::RIGHT_FOOT,
-        EquipSlot::LEFT_ARM,
-        EquipSlot::RIGHT_ARM,
-        EquipSlot::LEFT_HAND,
-        EquipSlot::RIGHT_HAND,
-        EquipSlot::BACK
-    };
-    
-    // 找到"已装备物品:"标题的位置
-    int equipTitleIndex = -1;
-    for (int i = 0; i < static_cast<int>(elements.size()); ++i) {
-        if (elements[i].getText() == "已装备物品:" && 
-            elements[i].getType() == UIElementType::SUBTITLE) {
-            equipTitleIndex = i;
-            break;
-        }
+    // 首先检查点击是否在窗口区域内
+    if (x < currentWindow->getX() || x > currentWindow->getX() + currentWindow->getWidth() ||
+        y < currentWindow->getY() || y > currentWindow->getY() + currentWindow->getHeight()) {
+        return EquipSlot::NONE;
     }
     
-    if (equipTitleIndex == -1) {
-        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "未找到装备标题，无法更新装备槽位坐标");
-        return;
-    }
-    
-    // 从装备标题后开始查找装备槽位
-    int currentElementIndex = equipTitleIndex + 1;
-    int slotIndex = 0;
-    
-    while (currentElementIndex < static_cast<int>(elements.size()) && 
-           slotIndex < static_cast<int>(allSlots.size())) {
-        
-        EquipSlot currentSlot = allSlots[slotIndex];
-        
-        // 将槽位枚举转换为可读字符串（与updatePlayerUI保持一致）
-        std::string slotName;
-        switch (currentSlot) {
-            case EquipSlot::HEAD: slotName = "头部"; break;
-            case EquipSlot::EYES: slotName = "眼部"; break;
-            case EquipSlot::CHEST: slotName = "胸部"; break;
-            case EquipSlot::ABDOMEN: slotName = "腹部"; break;
-            case EquipSlot::LEFT_LEG: slotName = "左腿"; break;
-            case EquipSlot::RIGHT_LEG: slotName = "右腿"; break;
-            case EquipSlot::LEFT_FOOT: slotName = "左脚"; break;
-            case EquipSlot::RIGHT_FOOT: slotName = "右脚"; break;
-            case EquipSlot::LEFT_ARM: slotName = "左臂"; break;
-            case EquipSlot::RIGHT_ARM: slotName = "右臂"; break;
-            case EquipSlot::LEFT_HAND: slotName = "左手"; break;
-            case EquipSlot::RIGHT_HAND: slotName = "右手"; break;
-            case EquipSlot::BACK: slotName = "背部"; break;
-            default: slotName = "未知"; break;
-        }
-        
-        // 查找对应的槽位标签元素
-        std::string expectedText = slotName + "：";
-        if (currentElementIndex < static_cast<int>(elements.size()) &&
-            elements[currentElementIndex].getText() == expectedText) {
-            
-            // 找到了对应的槽位标签，计算包含装备物品的整行区域
-            ElementRenderRect slotLabelRect;
-            if (currentWindow->getElementRect(currentElementIndex, slotLabelRect)) {
-                
-                // 计算整行的坐标（包括标签和物品）
-                EquipSlotCoordinates slotCoords;
-                slotCoords.slot = currentSlot;
-                slotCoords.isValid = true;
-                
-                // 设置整行的检测区域
-                slotCoords.rect.x = slotLabelRect.x;
-                slotCoords.rect.y = slotLabelRect.y;
-                slotCoords.rect.width = currentWindow->getWidth() - (slotLabelRect.x - currentWindow->getX());
-                slotCoords.rect.height = slotLabelRect.height;
-                
-                // 如果有装备物品，扩展高度以包含物品元素
-                if (currentElementIndex + 1 < static_cast<int>(elements.size())) {
-                    ElementRenderRect itemRect;
-                    if (currentWindow->getElementRect(currentElementIndex + 1, itemRect)) {
-                        // 扩展高度以包含物品行
-                        float bottomY = std::max(slotCoords.rect.y + slotCoords.rect.height,
-                                               itemRect.y + itemRect.height);
-                        slotCoords.rect.height = bottomY - slotCoords.rect.y;
-                    }
-                }
-                
-                equipSlotCoordinates.push_back(slotCoords);
-                
-                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "装备槽位[%s]坐标: (%.1f,%.1f,%.1f,%.1f)", 
-                           slotName.c_str(), slotCoords.rect.x, slotCoords.rect.y, 
-                           slotCoords.rect.width, slotCoords.rect.height);
-            }
-            
-            // 跳过槽位标签和可能的装备物品
-            currentElementIndex += 2; // 槽位标签 + 装备物品（可能是多个）
-        } else {
-            // 没找到期望的槽位标签，跳到下一个槽位
-            currentElementIndex++;
-        }
-        
-        slotIndex++;
-    }
-    
-    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "装备槽位坐标更新完成，共识别%zu个槽位", 
-               equipSlotCoordinates.size());
-}
-
-EquipSlot GameUI::detectEquipSlotAtPosition(int mouseX, int mouseY) {
-    // 检查每个装备槽位的坐标
-    for (const auto& slotCoords : equipSlotCoordinates) {
-        if (slotCoords.isValid &&
-            mouseX >= slotCoords.rect.x && 
-            mouseX <= slotCoords.rect.x + slotCoords.rect.width &&
-            mouseY >= slotCoords.rect.y && 
-            mouseY <= slotCoords.rect.y + slotCoords.rect.height) {
-            
-            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到装备槽位: %d", 
-                       static_cast<int>(slotCoords.slot));
-            return slotCoords.slot;
+    // 直接根据坐标范围查找装备槽位
+    for (const auto& coords : equipSlotCoordinatesMap) {
+        if (x >= coords.topLeftX && x <= coords.bottomRightX &&
+            y >= coords.topLeftY && y <= coords.bottomRightY) {
+            return coords.slot;
         }
     }
     
