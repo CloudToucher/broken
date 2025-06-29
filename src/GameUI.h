@@ -7,6 +7,7 @@
 #include <memory>
 #include <iostream>
 #include "UIWindow.h"
+#include "Item.h"
 
 class Game;
 class Player;
@@ -74,6 +75,14 @@ private:
     ElementRenderRect handSlotRect; // 手持位元素的渲染区域
     bool handSlotRectValid; // 手持位坐标是否有效
     
+    // 装备槽位坐标（动态计算）
+    struct EquipSlotCoordinates {
+        EquipSlot slot;                // 装备槽位类型
+        ElementRenderRect rect;        // 槽位元素的渲染区域
+        bool isValid;                  // 坐标是否有效
+    };
+    std::vector<EquipSlotCoordinates> equipSlotCoordinates; // 装备槽位坐标映射
+    
     // 待处理的物品信息（用于存储选择确认框）
     Item* pendingHeldItemToReplace;                    // 待替换的手持物品
     Item* pendingNewItemToHold;                        // 待手持的新物品
@@ -112,6 +121,12 @@ private:
     
     // 更新手持位坐标
     void updateHandSlotRect();
+    
+    // 更新装备槽位坐标
+    void updateEquipSlotCoordinates();
+    
+    // 检测拖拽位置是否在装备槽位上，返回槽位类型
+    EquipSlot detectEquipSlotAtPosition(int mouseX, int mouseY);
     
     // 确认对话框相关方法
     void showConfirmationDialog(const std::string& title, const std::string& message, 
