@@ -490,6 +490,11 @@ std::unique_ptr<Item> ItemLoader::loadItemFromJson(const json& itemJson) {
             loadCoverageSlots(item.get(), itemJson["coverage"]);
         }
         
+        // 加载防护数据（新系统）
+        if (itemJson.contains("protection")) {
+            loadProtectionData(item.get(), itemJson["protection"]);
+        }
+        
         // 加载标签
         if (itemJson.contains("flags") && itemJson["flags"].is_array()) {
             loadItemFlags(item.get(), itemJson["flags"]);
@@ -1096,6 +1101,49 @@ void ItemLoader::loadCoverageSlots(Item* item, const json& coverageJson) {
                     }
                     
                     item->addCoverageSlot(slot, coverage, burden);
+                }
+            }
+        }
+    }
+}
+
+// 辅助方法：从JSON加载防护数据
+void ItemLoader::loadProtectionData(Item* item, const json& protectionJson) {
+    // protectionJson格式：
+    // {
+    //     "CHEST": {
+    //         "钝击": 25,
+    //         "斩击": 30,
+    //         "刺击": 20,
+    //         "射击": 40
+    //     },
+    //     "HEAD": {
+    //         "钝击": 35,
+    //         "射击": 45
+    //     }
+    // }
+    
+    if (!protectionJson.is_object()) {
+        return;
+    }
+    
+    for (auto it = protectionJson.begin(); it != protectionJson.end(); ++it) {
+        std::string bodyPartStr = it.key();
+        EquipSlot bodyPart = stringToEquipSlot(bodyPartStr);
+        
+        if (bodyPart != EquipSlot::NONE && it.value().is_object()) {
+            // 为该身体部位添加防护数据
+            item->addProtectionData(bodyPart);
+            
+            // 加载各种伤害类型的防护值
+            const json& damageTypeProtections = it.value();
+            for (auto damageIt = damageTypeProtections.begin(); damageIt != damageTypeProtections.end(); ++damageIt) {
+                std::string damageTypeStr = damageIt.key();
+                
+                if (damageIt.value().is_number()) {
+                    int protectionValue = damageIt.value();
+                    DamageType damageType = stringToDamageType(damageTypeStr);
+                    item->setProtection(bodyPart, damageType, protectionValue);
                 }
             }
         }

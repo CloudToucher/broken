@@ -52,6 +52,7 @@ Item::Item(const Item& other)
       wearable(other.wearable),
       equipSlots(other.equipSlots),
       coverageSlots(other.coverageSlots),
+      protectionData(other.protectionData),
       rarity(other.rarity),
       flags(other.flags),
       description(other.description),
@@ -90,6 +91,7 @@ Item& Item::operator=(const Item& other) {
         wearable = other.wearable;
         equipSlots = other.equipSlots;
         coverageSlots = other.coverageSlots;
+        protectionData = other.protectionData;
         rarity = other.rarity;
         flags = other.flags;
         description = other.description;
@@ -419,3 +421,68 @@ std::vector<EquipSlot> Item::getAllCoveredSlots() const {
     }
     return slots;
 }
+
+// 防护系统相关方法实现
+void Item::addProtectionData(EquipSlot bodyPart) {
+    // 检查是否已存在该身体部位的防护数据
+    for (auto& data : protectionData) {
+        if (data.bodyPart == bodyPart) {
+            return; // 已存在，不重复添加
+        }
+    }
+    
+    // 添加新的防护数据
+    protectionData.emplace_back(bodyPart);
+}
+
+void Item::setProtection(EquipSlot bodyPart, DamageType damageType, int protectionValue) {
+    // 确保防护值在0-60范围内
+    protectionValue = std::max(0, std::min(60, protectionValue));
+    
+    // 查找对应身体部位的防护数据
+    for (auto& data : protectionData) {
+        if (data.bodyPart == bodyPart) {
+            data.setProtection(damageType, protectionValue);
+            return;
+        }
+    }
+    
+    // 如果不存在该身体部位的防护数据，创建一个
+    protectionData.emplace_back(bodyPart);
+    protectionData.back().setProtection(damageType, protectionValue);
+}
+
+int Item::getProtection(EquipSlot bodyPart, DamageType damageType) const {
+    for (const auto& data : protectionData) {
+        if (data.bodyPart == bodyPart) {
+            return data.getProtection(damageType);
+        }
+    }
+    return 0; // 没有找到对应的防护数据
+}
+
+bool Item::hasProtectionForBodyPart(EquipSlot bodyPart) const {
+    for (const auto& data : protectionData) {
+        if (data.bodyPart == bodyPart) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Item::removeProtectionData(EquipSlot bodyPart) {
+    auto it = std::remove_if(protectionData.begin(), protectionData.end(),
+        [bodyPart](const ProtectionData& data) {
+            return data.bodyPart == bodyPart;
+        });
+    protectionData.erase(it, protectionData.end());
+}
+
+std::vector<EquipSlot> Item::getProtectedBodyParts() const {
+    std::vector<EquipSlot> parts;
+    for (const auto& data : protectionData) {
+        parts.push_back(data.bodyPart);
+    }
+    return parts;
+}
+

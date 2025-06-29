@@ -7,10 +7,10 @@
 #include <memory>
 #include <iostream>
 #include "UIWindow.h"
-#include "Item.h" // 包含Item.h以获取EquipSlot枚举
 
 class Game;
 class Player;
+class Item;
 class Storage;
 
 // 使用UIWindow替代原来的ItemTooltip结构
@@ -24,13 +24,12 @@ struct StorageCoordinates {
     Storage* storage;
 };
 
-// 装备槽位坐标范围结构体
-struct EquipSlotCoordinates {
+// 装备区域坐标范围结构体
+struct EquipmentAreaCoordinates {
     float topLeftX;
     float topLeftY;
     float bottomRightX;
     float bottomRightY;
-    EquipSlot slot;
 };
 
 class GameUI {
@@ -79,8 +78,9 @@ private:
     // 存储空间坐标映射
     std::vector<StorageCoordinates> storageCoordinatesMap; // 存储空间坐标范围映射
     
-    // 装备槽位坐标映射
-    std::vector<EquipSlotCoordinates> equipSlotCoordinatesMap; // 装备槽位坐标范围映射
+    // 装备区域坐标映射
+    EquipmentAreaCoordinates equipmentAreaCoordinates; // 装备区域坐标范围
+    bool equipmentAreaValid; // 装备区域坐标是否有效
     
     // 手持位坐标（动态计算）
     ElementRenderRect handSlotRect; // 手持位元素的渲染区域
@@ -122,8 +122,8 @@ private:
     // 更新存储空间坐标映射
     void updateStorageCoordinatesMap();
     
-    // 更新装备槽位坐标映射
-    void updateEquipmentCoordinatesMap();
+    // 更新装备区域坐标映射
+    void updateEquipmentAreaCoordinatesMap();
     
     // 更新手持位坐标
     void updateHandSlotRect();
@@ -184,9 +184,6 @@ public:
     
     // 根据坐标查找对应元素所属的Storage
     Storage* findStorageByCoordinates(int x, int y);
-    
-    // 根据坐标查找对应的装备槽位
-    EquipSlot findEquipSlotByCoordinates(int x, int y);
     
     // 测试方法（可以通过按键触发）
     void testConfirmationDialog() {

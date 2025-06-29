@@ -13,6 +13,7 @@
 #include <sstream>
 #include <set>
 #include <iomanip>
+#include <map>
 #include "EquipmentSystem.h"
 #include "SkillSystem.h"
 
@@ -67,7 +68,7 @@ GameUI::GameUI()
       hoveredItem(nullptr), mouseX(0), mouseY(0),
       itemTooltipWindow(nullptr), currentPlayer(nullptr),
       isDragging(false), draggedItem(nullptr), sourceStorage(nullptr),
-      dragStartX(0), dragStartY(0), handSlotRectValid(false),
+      dragStartX(0), dragStartY(0), equipmentAreaValid(false), handSlotRectValid(false),
       pendingHeldItemToReplace(nullptr), pendingNewItemToHold(nullptr), pendingNewItemSource(nullptr),
       confirmationWindow(nullptr), isConfirmationVisible(false), 
       confirmationCallback(nullptr), originalTimeScaleBeforeConfirmation(1.0f) {
@@ -183,9 +184,15 @@ void GameUI::openPlayerUI(Game* game, Player* player) {
             currentWindow->setVisible(true);
         }
         
-        // 如果有当前玩家引用，更新UI
+        // 如果有当前玩家引用，更新对应标签页的UI
         if (currentPlayer) {
-            updatePlayerUI(currentPlayer);
+            if (currentTab == TabType::EQUIPMENT) {
+                updatePlayerUI(currentPlayer);
+            } else if (currentTab == TabType::HEALTH) {
+                updateHealthUI();
+            } else if (currentTab == TabType::SKILLS) {
+                updateSkillsUI();
+            }
         }
     }
 }
@@ -222,6 +229,9 @@ void GameUI::updatePlayerUI() {
     
     // 清空存储空间坐标映射
     storageCoordinatesMap.clear();
+    
+    // 清空装备区域坐标映射有效性
+    equipmentAreaValid = false;
 }
 
 void GameUI::updatePlayerUI(Player* player) {
@@ -532,15 +542,29 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
             // 设置窗口尺寸（占据左半屏幕，高度减去标签栏）
             currentWindow->setWidth(windowWidth / 2 - 45.0f);
             currentWindow->setHeight(windowHeight - 60.0f - TAB_HEIGHT);
+            
+            // 根据当前标签页进行实时更新
+            if (currentTab == TabType::EQUIPMENT) {
+                // 装备栏：更新存储空间相关功能
+                updateStorageCoordinatesMap();
+            } else if (currentTab == TabType::HEALTH) {
+                // 血量界面：实时更新血量显示
+                updateHealthUI();
+            } else if (currentTab == TabType::SKILLS) {
+                // 技能界面：实时更新技能显示
+                updateSkillsUI();
+            }
+            
             currentWindow->render(renderer, windowWidth, windowHeight);
         
         // 调试模式：渲染元素边框
             // currentWindow->renderElementBorders(renderer);
         
-            // 只在装备栏标签页更新存储空间相关功能
+            // 装备栏标签页的额外更新逻辑
             if (currentTab == TabType::EQUIPMENT) {
-        // 更新存储空间坐标映射
-        updateStorageCoordinatesMap();
+                
+                // 更新装备区域坐标映射
+                updateEquipmentAreaCoordinatesMap();
                 
                 // 更新手持位坐标
                 updateHandSlotRect();
@@ -600,57 +624,6 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
                 }
             }
                     
-            // 绘制装备槽位边框（只有在可穿戴物品且来自存储空间时才显示）
-            if (sourceStorage && draggedItem && draggedItem->isWearable()) {
-                // 更新装备槽位坐标映射
-                updateEquipmentCoordinatesMap();
-                
-                // 遍历所有装备槽位，显示可以装备的槽位
-                for (const auto& coords : equipSlotCoordinatesMap) {
-                    // 检查物品是否可以装备到该槽位
-                    if (draggedItem->canEquipToSlot(coords.slot)) {
-                        // 设置蓝色边框表示可装备的槽位
-                        SDL_SetRenderDrawColor(renderer, 100, 150, 255, 255); // 淡蓝色
-                        
-                        // 绘制边框（左右两侧）
-                        SDL_FRect leftBorder = {
-                            coords.topLeftX,
-                            coords.topLeftY,
-                            3.0f,
-                            coords.bottomRightY - coords.topLeftY
-                        };
-                        
-                        SDL_FRect rightBorder = {
-                            coords.bottomRightX - 3.0f,
-                            coords.topLeftY,
-                            3.0f,
-                            coords.bottomRightY - coords.topLeftY
-                        };
-                        
-                        // 绘制顶部和底部边框
-                        SDL_FRect topBorder = {
-                            coords.topLeftX,
-                            coords.topLeftY,
-                            coords.bottomRightX - coords.topLeftX,
-                            3.0f
-                        };
-                        
-                        SDL_FRect bottomBorder = {
-                            coords.topLeftX,
-                            coords.bottomRightY - 3.0f,
-                            coords.bottomRightX - coords.topLeftX,
-                            3.0f
-                        };
-                        
-                        // 绘制边框
-                        SDL_RenderFillRect(renderer, &leftBorder);
-                        SDL_RenderFillRect(renderer, &rightBorder);
-                        SDL_RenderFillRect(renderer, &topBorder);
-                        SDL_RenderFillRect(renderer, &bottomBorder);
-                    }
-                }
-            }
-                    
                     // 绘制手持位边框（只有在没有手持物品且正在拖拽来自存储空间的物品时才显示）
                     // 使用当前渲染的player而不是currentPlayer，确保状态一致性
                     Player* renderPlayer = Game::getInstance()->getPlayer();
@@ -688,6 +661,46 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
                             windowX + 10.0f, // 从窗口左边距开始
                             handSlotRect.y + handSlotRect.height - 3.0f,
                             windowWidth - 20.0f, // 铺满整个窗口宽度（减去边距）
+                            3.0f
+                        };
+                        
+                        // 绘制边框
+                        SDL_RenderFillRect(renderer, &leftBorder);
+                        SDL_RenderFillRect(renderer, &rightBorder);
+                        SDL_RenderFillRect(renderer, &topBorder);
+                        SDL_RenderFillRect(renderer, &bottomBorder);
+                    }
+                    
+                    // 绘制装备区域边框（只有在拖拽可穿戴物品时才显示）
+                    if (sourceStorage && draggedItem->isWearable() && equipmentAreaValid) {
+                        // 设置紫色边框表示装备区域
+                        SDL_SetRenderDrawColor(renderer, 147, 112, 219, 255); // 紫色
+                        
+                        SDL_FRect leftBorder = {
+                            equipmentAreaCoordinates.topLeftX + 10.0f,
+                            equipmentAreaCoordinates.topLeftY,
+                            3.0f,
+                            equipmentAreaCoordinates.bottomRightY - equipmentAreaCoordinates.topLeftY
+                        };
+                        
+                        SDL_FRect rightBorder = {
+                            equipmentAreaCoordinates.bottomRightX - 13.0f,
+                            equipmentAreaCoordinates.topLeftY,
+                            3.0f,
+                            equipmentAreaCoordinates.bottomRightY - equipmentAreaCoordinates.topLeftY
+                        };
+                        
+                        SDL_FRect topBorder = {
+                            equipmentAreaCoordinates.topLeftX + 10.0f,
+                            equipmentAreaCoordinates.topLeftY,
+                            equipmentAreaCoordinates.bottomRightX - equipmentAreaCoordinates.topLeftX - 20.0f,
+                            3.0f
+                        };
+                        
+                        SDL_FRect bottomBorder = {
+                            equipmentAreaCoordinates.topLeftX + 10.0f,
+                            equipmentAreaCoordinates.bottomRightY - 3.0f,
+                            equipmentAreaCoordinates.bottomRightX - equipmentAreaCoordinates.topLeftX - 20.0f,
                             3.0f
                         };
                         
@@ -1049,6 +1062,51 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
                         default: slotName = "未知"; break;
                     }
                     details.push_back("- " + slotName);
+                }
+            }
+        }
+        
+        // 显示防护信息
+        const auto& protectionData = item->getProtectionData();
+        if (!protectionData.empty()) {
+            details.push_back(""); // 空行
+            details.push_back("防护等级:");
+            
+            for (const auto& protection : protectionData) {
+                std::string partName;
+                switch (protection.bodyPart) {
+                    case EquipSlot::HEAD: partName = "头部"; break;
+                    case EquipSlot::EYES: partName = "眼部"; break;
+                    case EquipSlot::CHEST: partName = "胸部"; break;
+                    case EquipSlot::ABDOMEN: partName = "腹部"; break;
+                    case EquipSlot::LEFT_LEG: partName = "左腿"; break;
+                    case EquipSlot::RIGHT_LEG: partName = "右腿"; break;
+                    case EquipSlot::LEFT_FOOT: partName = "左脚"; break;
+                    case EquipSlot::RIGHT_FOOT: partName = "右脚"; break;
+                    case EquipSlot::LEFT_ARM: partName = "左臂"; break;
+                    case EquipSlot::RIGHT_ARM: partName = "右臂"; break;
+                    case EquipSlot::LEFT_HAND: partName = "左手"; break;
+                    case EquipSlot::RIGHT_HAND: partName = "右手"; break;
+                    case EquipSlot::BACK: partName = "背部"; break;
+                    default: partName = "未知"; break;
+                }
+                
+                details.push_back(partName + "防护:");
+                
+                // 显示各种伤害类型的防护值（只显示非零值）
+                std::vector<DamageType> mainProtectionTypes = {
+                    DamageType::BLUNT, DamageType::SLASH, DamageType::PIERCE,
+                    DamageType::ELECTRIC, DamageType::BURN, DamageType::HEAT,
+                    DamageType::COLD, DamageType::EXPLOSION, DamageType::SHOOTING
+                };
+                
+                for (DamageType damageType : mainProtectionTypes) {
+                    int protectionValue = protection.getProtection(damageType);
+                    
+                    if (protectionValue > 0) {
+                        std::string damageTypeName = damageTypeToString(damageType);
+                        details.push_back("  " + damageTypeName + ": " + std::to_string(protectionValue));
+                    }
                 }
             }
         }
@@ -1537,28 +1595,20 @@ bool GameUI::handleMouseMotion(int mouseX, int mouseY, float windowWidth, float 
 }
 
 void GameUI::updateStorageCoordinatesMap() {
-    // 清空现有映射
+    // 清空存储空间坐标映射
     storageCoordinatesMap.clear();
     
-    // 检查玩家窗口是否存在且在装备栏标签页
-    if (!isUIVisible || currentTab != TabType::EQUIPMENT || !currentPlayer) {
-        return;
-    }
+    // 只在装备栏标签页进行坐标映射
+    if (currentTab != TabType::EQUIPMENT) return;
     
     UIWindow* currentWindow = getCurrentTabWindow();
-    if (!currentWindow) {
-        return;
-    }
+    if (!currentWindow) return;
     
-    // 获取所有UI元素
     const auto& elements = currentWindow->getElements();
     
-    // 当前处理的存储空间
     Storage* currentStorage = nullptr;
     float storageStartY = 0.0f;
-    float storageEndY = 0.0f;
     
-    // 遍历所有元素
     for (size_t i = 0; i < elements.size(); ++i) {
         const auto& element = elements[i];
         
@@ -1606,127 +1656,61 @@ void GameUI::updateStorageCoordinatesMap() {
     }
 }
 
-void GameUI::updateEquipmentCoordinatesMap() {
-    // 清空现有装备槽位映射
-    equipSlotCoordinatesMap.clear();
+void GameUI::updateEquipmentAreaCoordinatesMap() {
+    // 重置装备区域有效性
+    equipmentAreaValid = false;
     
-    // 检查玩家窗口是否存在且在装备栏标签页
-    if (!isUIVisible || currentTab != TabType::EQUIPMENT || !currentPlayer) {
-        return;
-    }
+    // 只在装备栏标签页进行坐标映射
+    if (currentTab != TabType::EQUIPMENT) return;
     
     UIWindow* currentWindow = getCurrentTabWindow();
-    if (!currentWindow) {
-        return;
-    }
+    if (!currentWindow) return;
     
-    // 获取装备系统
-    EquipmentSystem* equipSystem = currentPlayer->getEquipmentSystem();
-    if (!equipSystem) {
-        return;
-    }
-    
-    // 获取所有UI元素
     const auto& elements = currentWindow->getElements();
     
-    // 定义所有需要处理的装备槽位（与UI生成时的顺序保持一致）
-    std::vector<EquipSlot> allSlots = {
-        EquipSlot::HEAD,
-        EquipSlot::EYES,
-        EquipSlot::CHEST,
-        EquipSlot::ABDOMEN,
-        EquipSlot::LEFT_LEG,
-        EquipSlot::RIGHT_LEG,
-        EquipSlot::LEFT_FOOT,
-        EquipSlot::RIGHT_FOOT,
-        EquipSlot::LEFT_ARM,
-        EquipSlot::RIGHT_ARM,
-        EquipSlot::LEFT_HAND,
-        EquipSlot::RIGHT_HAND,
-        EquipSlot::BACK
-    };
+    float equipmentAreaStartY = 0.0f;
+    float equipmentAreaEndY = 0.0f;
+    bool foundEquipmentStart = false;
+    bool foundEquipmentEnd = false;
     
-    // 将槽位名称映射，与UI生成时保持一致
-    auto getSlotName = [](EquipSlot slot) -> std::string {
-        switch (slot) {
-            case EquipSlot::HEAD: return "头部";
-            case EquipSlot::EYES: return "眼部";
-            case EquipSlot::CHEST: return "胸部";
-            case EquipSlot::ABDOMEN: return "腹部";
-            case EquipSlot::LEFT_LEG: return "左腿";
-            case EquipSlot::RIGHT_LEG: return "右腿";
-            case EquipSlot::LEFT_FOOT: return "左脚";
-            case EquipSlot::RIGHT_FOOT: return "右脚";
-            case EquipSlot::LEFT_ARM: return "左臂";
-            case EquipSlot::RIGHT_ARM: return "右臂";
-            case EquipSlot::LEFT_HAND: return "左手";
-            case EquipSlot::RIGHT_HAND: return "右手";
-            case EquipSlot::BACK: return "背部";
-            default: return "未知";
-        }
-    };
-    
-    // 遍历UI元素，查找装备槽位标签
-    for (size_t i = 0; i < elements.size() && !allSlots.empty(); ++i) {
+    for (size_t i = 0; i < elements.size(); ++i) {
         const auto& element = elements[i];
         
-        // 检查是否是装备槽位标签（以"：" 结尾）
-        std::string text = element.getText();
-        if (text.length() < 3 || text.substr(text.length() - 2) != "：") {
+        // 获取元素的渲染区域
+        ElementRenderRect rect;
+        if (!currentWindow->getElementRect(i, rect)) {
             continue;
         }
         
-        // 提取槽位名称（去掉最后的"："）
-        std::string slotName = text.substr(0, text.length() - 2);
-        
-        // 查找匹配的槽位
-        EquipSlot matchedSlot = EquipSlot::NONE;
-        for (auto slot : allSlots) {
-            if (getSlotName(slot) == slotName) {
-                matchedSlot = slot;
-                break;
-            }
+        // 查找"已装备物品:"标题
+        if (!foundEquipmentStart && element.getText() == "已装备物品:") {
+            equipmentAreaStartY = rect.y;
+            foundEquipmentStart = true;
+            continue;
         }
         
-        // 如果找到匹配的槽位，计算坐标范围
-        if (matchedSlot != EquipSlot::NONE) {
-            // 获取当前槽位标签元素的渲染区域
-            ElementRenderRect slotRect;
-            if (currentWindow->getElementRect(i, slotRect)) {
-                // 查找下一个槽位标签或其他分界元素，确定当前槽位的Y范围
-                float slotEndY = slotRect.y + slotRect.height;
-                
-                // 向后查找，找到下一个槽位标签或重要分界线
-                for (size_t j = i + 1; j < elements.size(); ++j) {
-                    const auto& nextElement = elements[j];
-                    std::string nextText = nextElement.getText();
-                    
-                    // 如果是下一个槽位标签（以"：" 结尾）或重要分界线（"背包物品:"等）
-                    if ((nextText.length() >= 3 && nextText.substr(nextText.length() - 2) == "：") ||
-                        nextText.find("背包物品:") != std::string::npos ||
-                        nextText.find("手持物品") != std::string::npos) {
-                        ElementRenderRect nextRect;
-                        if (currentWindow->getElementRect(j, nextRect)) {
-                            slotEndY = nextRect.y;
-                            break;
-                        }
-                    }
-                }
-                
-                // 创建装备槽位坐标映射
-                EquipSlotCoordinates coords;
-                coords.topLeftX = currentWindow->getX();
-                coords.topLeftY = slotRect.y;
-                coords.bottomRightX = currentWindow->getX() + currentWindow->getWidth();
-                coords.bottomRightY = slotEndY;
-                coords.slot = matchedSlot;
-                
-                equipSlotCoordinatesMap.push_back(coords);
-                
-                // 从待处理列表中移除这个槽位
-                allSlots.erase(std::remove(allSlots.begin(), allSlots.end(), matchedSlot), allSlots.end());
-            }
+        // 查找"背包物品:"标题作为装备区域的结束
+        if (foundEquipmentStart && !foundEquipmentEnd && element.getText() == "背包物品:") {
+            equipmentAreaEndY = rect.y;
+            foundEquipmentEnd = true;
+            break;
         }
+    }
+    
+    // 如果找到了装备区域的开始和结束，设置坐标
+    if (foundEquipmentStart) {
+        equipmentAreaCoordinates.topLeftX = currentWindow->getX();
+        equipmentAreaCoordinates.topLeftY = equipmentAreaStartY;
+        equipmentAreaCoordinates.bottomRightX = currentWindow->getX() + currentWindow->getWidth();
+        
+        // 如果找到了结束位置，使用它；否则使用窗口底部
+        if (foundEquipmentEnd) {
+            equipmentAreaCoordinates.bottomRightY = equipmentAreaEndY;
+        } else {
+            equipmentAreaCoordinates.bottomRightY = currentWindow->getY() + currentWindow->getHeight();
+        }
+        
+        equipmentAreaValid = true;
     }
 }
 
@@ -1754,10 +1738,6 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     if (player) {
         currentPlayer = player;
     }
-
-    // 更新坐标映射
-    updateStorageCoordinatesMap();
-    updateEquipmentCoordinatesMap();
 
     // 查找鼠标释放位置对应的存储空间
     Storage* targetStorage = findStorageByCoordinates(mouseX, mouseY);
@@ -1824,15 +1804,43 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
         }
     }
         
+        // TODO: 装备槽位检测需要实现动态计算，暂时注释掉硬编码的检测逻辑
         // 检查是否拖拽到装备位置，并确定具体的装备槽位
-        targetEquipSlot = findEquipSlotByCoordinates(mouseX, mouseY);
-        if (targetEquipSlot != EquipSlot::NONE) {
-            droppedOnEquipmentSlot = true;
-            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到装备槽位: %d", static_cast<int>(targetEquipSlot));
-        }
+        // （装备槽位的动态计算比手持位更复杂，将在后续版本实现）
     
+    // 检查是否拖拽到装备区域
+    bool droppedOnEquipmentArea = false;
+    
+    // 更新装备区域坐标
+    updateEquipmentAreaCoordinatesMap();
+    
+    // 检查是否拖拽到装备区域（只有在装备栏标签页才进行检测）
+    if (equipmentAreaValid && currentTab == TabType::EQUIPMENT && !isEquippedItem && !isHeldItem && sourceStorage) {
+        // 检查鼠标位置是否在装备区域内
+        if (mouseX >= equipmentAreaCoordinates.topLeftX + 10.0f && mouseX <= equipmentAreaCoordinates.bottomRightX - 10.0f &&
+            mouseY >= equipmentAreaCoordinates.topLeftY && mouseY <= equipmentAreaCoordinates.bottomRightY) {
+            droppedOnEquipmentArea = true;
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "检测到拖拽到装备区域");
+        }
+    }
+    
+    // 如果拖拽到装备区域
+    if (droppedOnEquipmentArea && draggedItem->isWearable()) {
+        // 先从源存储空间取出物品，然后装备
+        player->takeItemWithAction(draggedItem, sourceStorage, [player](std::unique_ptr<Item> takenItem) {
+            if (takenItem) {
+                // 取出成功，尝试装备
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "成功取出物品: %s，开始装备", takenItem->getName().c_str());
+                player->equipItemWithAction(std::move(takenItem));
+            } else {
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "取出物品失败");
+            }
+        });
+        
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "尝试将可穿戴物品装备: %s", draggedItem->getName().c_str());
+    }
     // 如果拖拽到装备位置
-    if (droppedOnEquipmentSlot && !isEquippedItem && !isHeldItem && sourceStorage) {
+    else if (droppedOnEquipmentSlot && !isEquippedItem && !isHeldItem && sourceStorage) {
         // 先检查物品是否可以装备到目标槽位
         bool canEquip = false;
         if (draggedItem->isWearable()) {
@@ -2505,7 +2513,7 @@ const char* GameUI::getTabName(TabType tab) const {
         case TabType::EQUIPMENT:
             return "装备栏";
         case TabType::HEALTH:
-            return "血量情况";
+            return "角色状态";
         case TabType::SKILLS:
             return "技能等级";
         default:
@@ -2513,19 +2521,270 @@ const char* GameUI::getTabName(TabType tab) const {
     }
 }
 
-// 更新血量情况UI（暂时空实现）
+// 更新血量情况UI
 void GameUI::updateHealthUI() {
     if (!healthWindow || !currentPlayer) return;
     
     healthWindow->clearElements();
     
     // 添加标题
-    UIElement title("血量情况", 20.0f, 50.0f, {255, 255, 255, 255}, UIElementType::TITLE);
+    UIElement title("角色状态", 20.0f, 60.0f, {255, 255, 255, 255}, UIElementType::TITLE);
     healthWindow->addElement(title);
     
-    // 添加占位文本
-    UIElement placeholder("血量界面开发中...", 20.0f, 40.0f, {200, 200, 200, 255}, UIElementType::TEXT);
-    healthWindow->addElement(placeholder);
+    // 添加间距
+    UIElement spacer1("", 0.0f, 25.0f, {255, 255, 255, 255}, UIElementType::TEXT);
+    healthWindow->addElement(spacer1);
+    
+    // 获取玩家血量数据
+    int headHealth = currentPlayer->getHeadHealth();
+    int torsoHealth = currentPlayer->getTorsoHealth();
+    int leftLegHealth = currentPlayer->getLeftLegHealth();
+    int rightLegHealth = currentPlayer->getRightLegHealth();
+    int leftArmHealth = currentPlayer->getLeftArmHealth();
+    int rightArmHealth = currentPlayer->getRightArmHealth();
+    
+    int maxHeadHealth = Player::getMaxHealthForBodyPart(Player::BodyPart::HEAD);
+    int maxTorsoHealth = Player::getMaxHealthForBodyPart(Player::BodyPart::TORSO);
+    int maxLegHealth = Player::getMaxHealthForBodyPart(Player::BodyPart::LEFT_LEG);
+    int maxArmHealth = Player::getMaxHealthForBodyPart(Player::BodyPart::LEFT_ARM);
+    
+    // 计算总血量
+    int currentTotalHealth = headHealth + torsoHealth + leftLegHealth + rightLegHealth + leftArmHealth + rightArmHealth;
+    int maxTotalHealth = maxHeadHealth + maxTorsoHealth + maxLegHealth * 2 + maxArmHealth * 2;
+    
+    // 显示总体血量概览
+    UIElement totalHealthTitle("总体血量:", 20.0f, 45.0f, {255, 215, 0, 255}, UIElementType::SUBTITLE);
+    healthWindow->addElement(totalHealthTitle);
+    
+    // 总血量数值和百分比
+    float healthPercentage = (float)currentTotalHealth / maxTotalHealth * 100.0f;
+    std::string totalHealthText = std::to_string(currentTotalHealth) + "/" + std::to_string(maxTotalHealth) + 
+                                 " (" + formatFloat(healthPercentage) + "%)";
+    
+    // 根据血量百分比设置颜色
+    SDL_Color totalHealthColor;
+    if (healthPercentage >= 80.0f) {
+        totalHealthColor = {50, 255, 50, 255};   // 绿色 - 健康
+    } else if (healthPercentage >= 50.0f) {
+        totalHealthColor = {255, 255, 50, 255};  // 黄色 - 轻伤
+    } else if (healthPercentage >= 25.0f) {
+        totalHealthColor = {255, 165, 0, 255};   // 橙色 - 重伤
+    } else {
+        totalHealthColor = {255, 50, 50, 255};   // 红色 - 危险
+    }
+    
+    UIElement totalHealthValue(totalHealthText, 40.0f, 32.0f, totalHealthColor, UIElementType::TEXT);
+    healthWindow->addElement(totalHealthValue);
+    
+    // 添加分割线
+    UIElement spacer2("", 0.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT);
+    healthWindow->addElement(spacer2);
+    
+    // 显示各部位详细血量
+    UIElement detailTitle("身体部位详情:", 20.0f, 45.0f, {200, 200, 255, 255}, UIElementType::SUBTITLE);
+    healthWindow->addElement(detailTitle);
+    
+    // 头部血量
+    std::string headText = "头部: " + std::to_string(headHealth) + "/" + std::to_string(maxHeadHealth);
+    float headPercentage = (float)headHealth / maxHeadHealth * 100.0f;
+    SDL_Color headColor = (headPercentage >= 70.0f) ? SDL_Color{50, 255, 50, 255} :
+                         (headPercentage >= 40.0f) ? SDL_Color{255, 255, 50, 255} :
+                         (headPercentage >= 15.0f) ? SDL_Color{255, 165, 0, 255} :
+                                                    SDL_Color{255, 50, 50, 255};
+    UIElement headElement(headText, 40.0f, 32.0f, headColor, UIElementType::TEXT);
+    healthWindow->addElement(headElement);
+    
+    // 躯干血量
+    std::string torsoText = "躯干: " + std::to_string(torsoHealth) + "/" + std::to_string(maxTorsoHealth);
+    float torsoPercentage = (float)torsoHealth / maxTorsoHealth * 100.0f;
+    SDL_Color torsoColor = (torsoPercentage >= 70.0f) ? SDL_Color{50, 255, 50, 255} :
+                          (torsoPercentage >= 40.0f) ? SDL_Color{255, 255, 50, 255} :
+                          (torsoPercentage >= 15.0f) ? SDL_Color{255, 165, 0, 255} :
+                                                     SDL_Color{255, 50, 50, 255};
+    UIElement torsoElement(torsoText, 40.0f, 32.0f, torsoColor, UIElementType::TEXT);
+    healthWindow->addElement(torsoElement);
+    
+    // 左臂血量
+    std::string leftArmText = "左臂: " + std::to_string(leftArmHealth) + "/" + std::to_string(maxArmHealth);
+    float leftArmPercentage = (float)leftArmHealth / maxArmHealth * 100.0f;
+    SDL_Color leftArmColor = (leftArmPercentage >= 70.0f) ? SDL_Color{50, 255, 50, 255} :
+                            (leftArmPercentage >= 40.0f) ? SDL_Color{255, 255, 50, 255} :
+                            (leftArmPercentage >= 15.0f) ? SDL_Color{255, 165, 0, 255} :
+                                                          SDL_Color{255, 50, 50, 255};
+    UIElement leftArmElement(leftArmText, 40.0f, 32.0f, leftArmColor, UIElementType::TEXT);
+    healthWindow->addElement(leftArmElement);
+    
+    // 右臂血量
+    std::string rightArmText = "右臂: " + std::to_string(rightArmHealth) + "/" + std::to_string(maxArmHealth);
+    float rightArmPercentage = (float)rightArmHealth / maxArmHealth * 100.0f;
+    SDL_Color rightArmColor = (rightArmPercentage >= 70.0f) ? SDL_Color{50, 255, 50, 255} :
+                             (rightArmPercentage >= 40.0f) ? SDL_Color{255, 255, 50, 255} :
+                             (rightArmPercentage >= 15.0f) ? SDL_Color{255, 165, 0, 255} :
+                                                           SDL_Color{255, 50, 50, 255};
+    UIElement rightArmElement(rightArmText, 40.0f, 32.0f, rightArmColor, UIElementType::TEXT);
+    healthWindow->addElement(rightArmElement);
+    
+    // 左腿血量
+    std::string leftLegText = "左腿: " + std::to_string(leftLegHealth) + "/" + std::to_string(maxLegHealth);
+    float leftLegPercentage = (float)leftLegHealth / maxLegHealth * 100.0f;
+    SDL_Color leftLegColor = (leftLegPercentage >= 70.0f) ? SDL_Color{50, 255, 50, 255} :
+                            (leftLegPercentage >= 40.0f) ? SDL_Color{255, 255, 50, 255} :
+                            (leftLegPercentage >= 15.0f) ? SDL_Color{255, 165, 0, 255} :
+                                                          SDL_Color{255, 50, 50, 255};
+    UIElement leftLegElement(leftLegText, 40.0f, 32.0f, leftLegColor, UIElementType::TEXT);
+    healthWindow->addElement(leftLegElement);
+    
+    // 右腿血量
+    std::string rightLegText = "右腿: " + std::to_string(rightLegHealth) + "/" + std::to_string(maxLegHealth);
+    float rightLegPercentage = (float)rightLegHealth / maxLegHealth * 100.0f;
+    SDL_Color rightLegColor = (rightLegPercentage >= 70.0f) ? SDL_Color{50, 255, 50, 255} :
+                             (rightLegPercentage >= 40.0f) ? SDL_Color{255, 255, 50, 255} :
+                             (rightLegPercentage >= 15.0f) ? SDL_Color{255, 165, 0, 255} :
+                                                           SDL_Color{255, 50, 50, 255};
+    UIElement rightLegElement(rightLegText, 40.0f, 32.0f, rightLegColor, UIElementType::TEXT);
+    healthWindow->addElement(rightLegElement);
+    
+    // 添加分割线
+    UIElement spacer3("", 0.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT);
+    healthWindow->addElement(spacer3);
+    
+    // 显示健康状态说明
+    UIElement statusTitle("健康状态:", 20.0f, 45.0f, {200, 200, 255, 255}, UIElementType::SUBTITLE);
+    healthWindow->addElement(statusTitle);
+    
+    // 根据关键部位血量给出状态描述
+    std::string healthStatus;
+    SDL_Color statusColor;
+    
+    if (headHealth <= 0 || torsoHealth <= 0) {
+        healthStatus = "危急！关键部位受损严重";
+        statusColor = {255, 50, 50, 255};
+    } else if (headHealth < maxHeadHealth * 0.3f || torsoHealth < maxTorsoHealth * 0.3f) {
+        healthStatus = "重伤！需要立即治疗";
+        statusColor = {255, 100, 50, 255};
+    } else if (currentTotalHealth < maxTotalHealth * 0.5f) {
+        healthStatus = "中度受伤，建议休息治疗";
+        statusColor = {255, 200, 50, 255};
+    } else if (currentTotalHealth < maxTotalHealth * 0.8f) {
+        healthStatus = "轻度受伤，状态良好";
+        statusColor = {255, 255, 100, 255};
+    } else {
+        healthStatus = "身体健康，状态良好";
+        statusColor = {100, 255, 100, 255};
+    }
+    
+    UIElement statusElement(healthStatus, 40.0f, 32.0f, statusColor, UIElementType::TEXT);
+    healthWindow->addElement(statusElement);
+    
+    // 添加分割线
+    UIElement spacer4("", 0.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT);
+    healthWindow->addElement(spacer4);
+    
+    // 显示防护等级信息
+    UIElement protectionTitle("防护等级:", 20.0f, 45.0f, {255, 200, 100, 255}, UIElementType::SUBTITLE);
+    healthWindow->addElement(protectionTitle);
+    
+    // 获取装备系统
+    EquipmentSystem* equipmentSystem = currentPlayer->getEquipmentSystem();
+    if (equipmentSystem) {
+        // 创建一个映射来汇总每个身体部位的防护值
+        std::map<EquipSlot, std::map<DamageType, int>> totalProtection;
+        
+        // 获取所有已装备的物品
+        std::vector<Item*> equippedItems = equipmentSystem->getAllEquippedItems();
+        
+        // 遍历所有已装备物品，汇总防护值
+        for (Item* item : equippedItems) {
+            if (item && item->hasFlag(ItemFlag::WEARABLE)) {
+                const auto& protectionData = item->getProtectionData();
+                
+                for (const auto& protection : protectionData) {
+                    EquipSlot bodyPart = protection.bodyPart;
+                    
+                    // 累加各种伤害类型的防护值
+                    std::vector<DamageType> mainProtectionTypes = {
+                        DamageType::BLUNT, DamageType::SLASH, DamageType::PIERCE,
+                        DamageType::ELECTRIC, DamageType::BURN, DamageType::HEAT,
+                        DamageType::COLD, DamageType::EXPLOSION, DamageType::SHOOTING
+                    };
+                    
+                    for (DamageType damageType : mainProtectionTypes) {
+                        int protectionValue = protection.getProtection(damageType);
+                        if (protectionValue > 0) {
+                            totalProtection[bodyPart][damageType] += protectionValue;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 显示各个身体部位的防护信息
+        std::vector<EquipSlot> bodyParts = {
+            EquipSlot::HEAD, EquipSlot::CHEST, EquipSlot::ABDOMEN,
+            EquipSlot::LEFT_ARM, EquipSlot::RIGHT_ARM,
+            EquipSlot::LEFT_LEG, EquipSlot::RIGHT_LEG
+        };
+        
+        bool hasAnyProtection = false;
+        for (EquipSlot bodyPart : bodyParts) {
+            if (totalProtection.find(bodyPart) != totalProtection.end() && !totalProtection[bodyPart].empty()) {
+                hasAnyProtection = true;
+                
+                // 身体部位名称
+                std::string partName;
+                switch (bodyPart) {
+                    case EquipSlot::HEAD: partName = "头部"; break;
+                    case EquipSlot::CHEST: partName = "胸部"; break;
+                    case EquipSlot::ABDOMEN: partName = "腹部"; break;
+                    case EquipSlot::LEFT_ARM: partName = "左臂"; break;
+                    case EquipSlot::RIGHT_ARM: partName = "右臂"; break;
+                    case EquipSlot::LEFT_LEG: partName = "左腿"; break;
+                    case EquipSlot::RIGHT_LEG: partName = "右腿"; break;
+                    default: partName = "未知"; break;
+                }
+                
+                UIElement partTitle(partName + "防护:", 40.0f, 35.0f, {200, 255, 200, 255}, UIElementType::TEXT);
+                healthWindow->addElement(partTitle);
+                
+                // 显示该部位的防护值（按伤害类型分类）
+                for (const auto& protectionPair : totalProtection[bodyPart]) {
+                    DamageType damageType = protectionPair.first;
+                    int protectionValue = protectionPair.second;
+                    
+                    if (protectionValue > 0) {
+                        std::string damageTypeName = damageTypeToString(damageType);
+                        std::string protectionText = "  " + damageTypeName + ": " + std::to_string(protectionValue);
+                        
+                        // 根据防护值设置颜色
+                        SDL_Color protectionColor;
+                        if (protectionValue >= 40) {
+                            protectionColor = {100, 255, 100, 255};  // 绿色 - 高防护
+                        } else if (protectionValue >= 20) {
+                            protectionColor = {255, 255, 100, 255};  // 黄色 - 中等防护
+                        } else {
+                            protectionColor = {255, 200, 100, 255};  // 橙色 - 低防护
+                        }
+                        
+                        UIElement protectionElement(protectionText, 60.0f, 30.0f, protectionColor, UIElementType::TEXT);
+                        healthWindow->addElement(protectionElement);
+                    }
+                }
+                
+                // 部位间间距
+                UIElement partSpacer("", 0.0f, 10.0f, {255, 255, 255, 255}, UIElementType::TEXT);
+                healthWindow->addElement(partSpacer);
+            }
+        }
+        
+        // 如果没有任何防护装备
+        if (!hasAnyProtection) {
+            UIElement noProtectionElement("未装备任何防护装备", 40.0f, 32.0f, {150, 150, 150, 255}, UIElementType::TEXT);
+            healthWindow->addElement(noProtectionElement);
+        }
+    } else {
+        UIElement errorElement("无法获取装备信息", 40.0f, 32.0f, {255, 100, 100, 255}, UIElementType::TEXT);
+        healthWindow->addElement(errorElement);
+    }
 }
 
 // 更新技能等级UI
@@ -2627,32 +2886,4 @@ void GameUI::updateSkillsUI() {
         UIElement categorySpacer("", 0.0f, 20.0f, {0, 0, 0, 0}, UIElementType::TEXT);
         skillsWindow->addElement(categorySpacer);
     }
-}
-
-EquipSlot GameUI::findEquipSlotByCoordinates(int x, int y) {
-    // 检查玩家UI是否可见且在装备栏标签页
-    if (!isUIVisible || currentTab != TabType::EQUIPMENT || !currentPlayer) {
-        return EquipSlot::NONE;
-    }
-    
-    UIWindow* currentWindow = getCurrentTabWindow();
-    if (!currentWindow) {
-        return EquipSlot::NONE;
-    }
-    
-    // 首先检查点击是否在窗口区域内
-    if (x < currentWindow->getX() || x > currentWindow->getX() + currentWindow->getWidth() ||
-        y < currentWindow->getY() || y > currentWindow->getY() + currentWindow->getHeight()) {
-        return EquipSlot::NONE;
-    }
-    
-    // 直接根据坐标范围查找装备槽位
-    for (const auto& coords : equipSlotCoordinatesMap) {
-        if (x >= coords.topLeftX && x <= coords.bottomRightX &&
-            y >= coords.topLeftY && y <= coords.bottomRightY) {
-            return coords.slot;
-        }
-    }
-    
-    return EquipSlot::NONE;
 }

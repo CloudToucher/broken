@@ -6,49 +6,73 @@
 // 实现DamageType转换为字符串的函数
 std::string damageTypeToString(DamageType type) {
     switch (type) {
-        case DamageType::SHOOTING: return "shooting";
-        case DamageType::BLUNT: return "blunt";
-        case DamageType::SLASH: return "slash";
-        case DamageType::PIERCE: return "pierce";
-        case DamageType::ELECTRIC: return "electric";
-        case DamageType::BURN: return "burn";
-        case DamageType::COLD: return "cold";
-        case DamageType::HEAT: return "heat";
-        case DamageType::TOXIC: return "toxic";
-        case DamageType::HUNGER: return "hunger";
-        case DamageType::THIRST: return "thirst";
-        case DamageType::SUFFOCATION: return "suffocation";
-        case DamageType::FALL: return "fall";
-        case DamageType::EXPLOSION: return "explosion";
-        case DamageType::RADIATION: return "radiation";
-        case DamageType::ACID: return "acid";
-        case DamageType::PSYCHIC: return "psychic";
-        case DamageType::PURE: return "pure";
-        default: return "unknown";
+        case DamageType::BLUNT: return "钝击";
+        case DamageType::SLASH: return "斩击";
+        case DamageType::PIERCE: return "刺击";
+        case DamageType::ELECTRIC: return "电击";
+        case DamageType::BURN: return "火焰";
+        case DamageType::HEAT: return "高温";
+        case DamageType::COLD: return "寒冷";
+        case DamageType::EXPLOSION: return "爆炸";
+        case DamageType::SHOOTING: return "射击";
+        case DamageType::TOXIC: return "毒素";
+        case DamageType::HUNGER: return "饥饿";
+        case DamageType::THIRST: return "口渴";
+        case DamageType::SUFFOCATION: return "窒息";
+        case DamageType::FALL: return "坠落";
+        case DamageType::RADIATION: return "辐射";
+        case DamageType::ACID: return "酸性";
+        case DamageType::PSYCHIC: return "精神";
+        case DamageType::PURE: return "纯粹";
+        default: return "未知";
     }
 }
 
 // 实现字符串转换为DamageType的函数
 DamageType stringToDamageType(const std::string& typeStr) {
     static const std::unordered_map<std::string, DamageType> typeMap = {
-        {"shooting", DamageType::SHOOTING},
-        {"blunt", DamageType::BLUNT},
-        {"slash", DamageType::SLASH},
-        {"pierce", DamageType::PIERCE},
-        {"electric", DamageType::ELECTRIC},
-        {"burn", DamageType::BURN},
-        {"cold", DamageType::COLD},
-        {"heat", DamageType::HEAT},
-        {"toxic", DamageType::TOXIC},
-        {"hunger", DamageType::HUNGER},
-        {"thirst", DamageType::THIRST},
-        {"suffocation", DamageType::SUFFOCATION},
-        {"fall", DamageType::FALL},
-        {"explosion", DamageType::EXPLOSION},
-        {"radiation", DamageType::RADIATION},
-        {"acid", DamageType::ACID},
-        {"psychic", DamageType::PSYCHIC},
-        {"pure", DamageType::PURE}
+        // 中文名称
+        {"钝击", DamageType::BLUNT},
+        {"斩击", DamageType::SLASH},
+        {"刺击", DamageType::PIERCE},
+        {"电击", DamageType::ELECTRIC},
+        {"火焰", DamageType::BURN},
+        {"高温", DamageType::HEAT},
+        {"寒冷", DamageType::COLD},
+        {"爆炸", DamageType::EXPLOSION},
+        {"射击", DamageType::SHOOTING},
+        {"毒素", DamageType::TOXIC},
+        {"饥饿", DamageType::HUNGER},
+        {"口渴", DamageType::THIRST},
+        {"窒息", DamageType::SUFFOCATION},
+        {"坠落", DamageType::FALL},
+        {"辐射", DamageType::RADIATION},
+        {"酸性", DamageType::ACID},
+        {"精神", DamageType::PSYCHIC},
+        {"纯粹", DamageType::PURE},
+        
+        // 英文名称（兼容）
+        {"BLUNT", DamageType::BLUNT},
+        {"SLASH", DamageType::SLASH},
+        {"PIERCE", DamageType::PIERCE},
+        {"ELECTRIC", DamageType::ELECTRIC},
+        {"BURN", DamageType::BURN},
+        {"FIRE", DamageType::BURN}, // 火焰的别名
+        {"HEAT", DamageType::HEAT},
+        {"COLD", DamageType::COLD},
+        {"EXPLOSION", DamageType::EXPLOSION},
+        {"EXPLOSIVE", DamageType::EXPLOSION}, // 爆炸的别名
+        {"SHOOTING", DamageType::SHOOTING},
+        {"BALLISTIC", DamageType::SHOOTING}, // 射击的别名
+        {"TOXIC", DamageType::TOXIC},
+        {"HUNGER", DamageType::HUNGER},
+        {"THIRST", DamageType::THIRST},
+        {"SUFFOCATION", DamageType::SUFFOCATION},
+        {"FALL", DamageType::FALL},
+        {"RADIATION", DamageType::RADIATION},
+        {"ACID", DamageType::ACID},
+        {"PSYCHIC", DamageType::PSYCHIC},
+        {"PURE", DamageType::PURE}
     };
     
     auto it = typeMap.find(typeStr);
@@ -56,7 +80,7 @@ DamageType stringToDamageType(const std::string& typeStr) {
         return it->second;
     }
     
-    return DamageType::PURE; // 默认为纯粹伤害
+    return DamageType::BLUNT; // 默认为钝击伤害
 }
 
 // 实现Damage类的构造函数

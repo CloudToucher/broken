@@ -8,6 +8,8 @@
 #include <unordered_set>
 #include <SDL3/SDL.h> // 用于可能的渲染或图标
 #include "ItemFlag.h" // 添加物品标签头文件
+#include "Damage.h" // 包含伤害类型定义
+#include <map>
 
 // 前向声明
 class Storage;
@@ -41,6 +43,8 @@ enum class EquipSlot {
     BACK,           // 背部
 };
 
+
+
 // 装备覆盖率结构体
 struct EquipSlotCoverage {
     EquipSlot slot;         // 覆盖的部位
@@ -50,6 +54,39 @@ struct EquipSlotCoverage {
     EquipSlotCoverage(EquipSlot s = EquipSlot::NONE, int c = 0, int b = 0) 
         : slot(s), coverage(c), burden(b) {}
 };
+
+// 防护数据结构体
+struct ProtectionData {
+    EquipSlot bodyPart;                                    // 身体部位
+    std::map<DamageType, int> protectionValues;            // 各种伤害类型的防护值（0-60）
+    
+    ProtectionData(EquipSlot part = EquipSlot::NONE) 
+        : bodyPart(part) {
+        // 初始化主要防护类型的防护值为0
+        protectionValues[DamageType::BLUNT] = 0;
+        protectionValues[DamageType::SLASH] = 0;
+        protectionValues[DamageType::PIERCE] = 0;
+        protectionValues[DamageType::ELECTRIC] = 0;
+        protectionValues[DamageType::BURN] = 0;
+        protectionValues[DamageType::HEAT] = 0;
+        protectionValues[DamageType::COLD] = 0;
+        protectionValues[DamageType::EXPLOSION] = 0;
+        protectionValues[DamageType::SHOOTING] = 0;
+    }
+    
+    // 设置特定伤害类型的防护值
+    void setProtection(DamageType damageType, int value) {
+        protectionValues[damageType] = std::max(0, std::min(60, value)); // 限制在0-60范围内
+    }
+    
+    // 获取特定伤害类型的防护值
+    int getProtection(DamageType damageType) const {
+        auto it = protectionValues.find(damageType);
+        return (it != protectionValues.end()) ? it->second : 0;
+    }
+};
+
+
 
 class Item {
 protected:
@@ -61,6 +98,7 @@ protected:
     bool wearable;                         // 是否可穿戴
     std::vector<EquipSlot> equipSlots;     // 物品可以覆盖的槽位（向后兼容，已弃用）
     std::vector<EquipSlotCoverage> coverageSlots; // 物品覆盖的槽位及覆盖率
+    std::vector<ProtectionData> protectionData;   // 各身体部位的防护数据
     ItemRarity rarity;                     // 物品稀有度
     
     // 物品标签集合（用于替代物品类别）
@@ -188,6 +226,17 @@ public:
     
     // 获取所有覆盖的槽位（不包含覆盖率信息，向后兼容）
     std::vector<EquipSlot> getAllCoveredSlots() const;
+    
+    // 防护系统相关方法
+    void addProtectionData(EquipSlot bodyPart);
+    void setProtection(EquipSlot bodyPart, DamageType damageType, int protectionValue);
+    int getProtection(EquipSlot bodyPart, DamageType damageType) const;
+    bool hasProtectionForBodyPart(EquipSlot bodyPart) const;
+    void removeProtectionData(EquipSlot bodyPart);
+    const std::vector<ProtectionData>& getProtectionData() const { return protectionData; }
+    
+    // 获取所有有防护数据的身体部位
+    std::vector<EquipSlot> getProtectedBodyParts() const;
     
     // 存储空间相关方法
     void addStorage(std::unique_ptr<Storage> storage);

@@ -11,20 +11,23 @@ class Entity;
 
 // 伤害类型枚举
 enum class DamageType {
-    SHOOTING,    // 射击伤害
+    // 主要防护类型（用于防护系统）
     BLUNT,       // 钝击伤害
-    SLASH,       // 斩击伤害
+    SLASH,       // 斩击伤害  
     PIERCE,      // 刺击伤害
     ELECTRIC,    // 电击伤害
-    BURN,        // 灼伤伤害
-    COLD,        // 低温伤害
+    BURN,        // 火焰伤害
     HEAT,        // 高温伤害
+    COLD,        // 寒冷伤害
+    EXPLOSION,   // 爆炸伤害
+    SHOOTING,    // 射击伤害
+    
+    // 其他伤害类型（兼容现有系统）
     TOXIC,       // 毒素伤害
     HUNGER,      // 饥饿伤害
     THIRST,      // 口渴伤害
     SUFFOCATION, // 窒息伤害
     FALL,        // 坠落伤害
-    EXPLOSION,   // 爆炸伤害
     RADIATION,   // 辐射伤害
     ACID,        // 酸性伤害
     PSYCHIC,     // 精神伤害

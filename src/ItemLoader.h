@@ -103,6 +103,9 @@ private:
     // 辅助方法：从JSON加载覆盖率信息
     void loadCoverageSlots(Item* item, const json& coverageJson);
     
+    // 辅助方法：从JSON加载防护数据
+    void loadProtectionData(Item* item, const json& protectionJson);
+    
     // 辅助方法：将字符串转换为EquipSlot枚举
     EquipSlot stringToEquipSlot(const std::string& slotStr);
     
