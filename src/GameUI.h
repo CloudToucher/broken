@@ -178,6 +178,9 @@ public:
     // 处理鼠标释放事件
     bool handleMouseRelease(int mouseX, int mouseY, Player* player, float windowWidth, float windowHeight);
     
+    // 处理滚轮事件
+    bool handleScroll(int mouseX, int mouseY, float scrollDelta);
+    
     // 检查UI是否可见
     bool isPlayerUIOpen() const { return isUIVisible; }
     bool isAnyUIOpen() const { return isUIVisible || isConfirmationVisible; }

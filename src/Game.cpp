@@ -14,6 +14,7 @@
 #include "GunMod.h"   // 添加 GunMod.h
 #include "SoundManager.h" // <--- 添加这一行
 #include "ItemLoader.h" // 添加 ItemLoader.h
+#include "Damage.h"   // 添加 Damage.h 用于装备系统测试
 #include <SDL3/SDL_mouse.h>
 #include <iostream>
 #include <cmath>
@@ -279,6 +280,93 @@ bool Game::init() {
                     player->getEquipmentSystem()->equipItem(std::move(combatSuit));
                     std::cout << "Player equipped with 连体作战服." << std::endl;
                 }
+                
+                // === 装备系统测试输出 ===
+                std::cout << "\n=== 装备系统测试 - 覆盖部位和防护等级 ===" << std::endl;
+                
+                auto equippedItems = player->getEquipmentSystem()->getAllEquippedItems();
+                if (!equippedItems.empty()) {
+                    for (Item* item : equippedItems) {
+                        if (item && item->isWearable()) {
+                            std::cout << "\n装备物品: " << item->getName() << std::endl;
+                            
+                            // 显示覆盖部位和覆盖率
+                            const auto& coverageSlots = item->getCoverageSlots();
+                            if (!coverageSlots.empty()) {
+                                std::cout << "  覆盖部位和覆盖率:" << std::endl;
+                                for (const auto& coverage : coverageSlots) {
+                                    std::string slotName;
+                                    switch (coverage.slot) {
+                                        case EquipSlot::HEAD: slotName = "头部"; break;
+                                        case EquipSlot::CHEST: slotName = "胸部"; break;
+                                        case EquipSlot::ABDOMEN: slotName = "腹部"; break;
+                                        case EquipSlot::LEFT_LEG: slotName = "左腿"; break;
+                                        case EquipSlot::RIGHT_LEG: slotName = "右腿"; break;
+                                        case EquipSlot::LEFT_ARM: slotName = "左臂"; break;
+                                        case EquipSlot::RIGHT_ARM: slotName = "右臂"; break;
+                                        case EquipSlot::BACK: slotName = "背部"; break;
+                                        default: slotName = "其他"; break;
+                                    }
+                                    std::cout << "    " << slotName << ": " << coverage.coverage << "% (累赘值: " << coverage.burden << ")" << std::endl;
+                                }
+                            }
+                            
+                            // 显示防护等级
+                            const auto& protectionData = item->getProtectionData();
+                            if (!protectionData.empty()) {
+                                std::cout << "  防护等级:" << std::endl;
+                                for (const auto& protection : protectionData) {
+                                    std::string partName;
+                                    switch (protection.bodyPart) {
+                                        case EquipSlot::HEAD: partName = "头部"; break;
+                                        case EquipSlot::CHEST: partName = "胸部"; break;
+                                        case EquipSlot::ABDOMEN: partName = "腹部"; break;
+                                        case EquipSlot::LEFT_LEG: partName = "左腿"; break;
+                                        case EquipSlot::RIGHT_LEG: partName = "右腿"; break;
+                                        case EquipSlot::LEFT_ARM: partName = "左臂"; break;
+                                        case EquipSlot::RIGHT_ARM: partName = "右臂"; break;
+                                        case EquipSlot::BACK: partName = "背部"; break;
+                                        default: partName = "其他"; break;
+                                    }
+                                    
+                                    // 收集该部位的所有防护值并在同一行显示
+                                    std::vector<std::pair<DamageType, std::string>> damageTypes = {
+                                        {DamageType::BLUNT, "钝击"},
+                                        {DamageType::SLASH, "斩击"},
+                                        {DamageType::PIERCE, "穿刺"},
+                                        {DamageType::SHOOTING, "射击"},
+                                        {DamageType::EXPLOSION, "爆炸"},
+                                        {DamageType::BURN, "灼烧"},
+                                        {DamageType::HEAT, "高温"},
+                                        {DamageType::COLD, "低温"},
+                                        {DamageType::ELECTRIC, "电击"}
+                                    };
+                                    
+                                    std::string protectionLine = "    " + partName + "防护: ";
+                                    bool hasProtection = false;
+                                    
+                                    for (const auto& damageType : damageTypes) {
+                                        int protectionValue = protection.getProtection(damageType.first);
+                                        if (protectionValue > 0) {
+                                            if (hasProtection) {
+                                                protectionLine += ", ";
+                                            }
+                                            protectionLine += damageType.second + ":" + std::to_string(protectionValue);
+                                            hasProtection = true;
+                                        }
+                                    }
+                                    
+                                    if (hasProtection) {
+                                        std::cout << protectionLine << std::endl;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    std::cout << "玩家当前没有装备任何物品" << std::endl;
+                }
+                std::cout << "=== 装备系统测试完成 ===\n" << std::endl;
             }
 
             hud = std::make_unique<HUD>();
@@ -582,8 +670,17 @@ void Game::handleEvents() {
         }
         // 处理鼠标滚轮事件
         else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-            // 检查Ctrl键是否被按下
-            if (event.wheel.which != SDL_TOUCH_MOUSEID && (SDL_GetModState() & SDL_KMOD_CTRL)) {
+            float mouseX, mouseY;
+            SDL_GetMouseState(&mouseX, &mouseY);
+            
+            // 首先尝试让GameUI处理滚轮事件
+            bool uiHandled = false;
+            if (gameUI) {
+                uiHandled = gameUI->handleScroll(static_cast<int>(mouseX), static_cast<int>(mouseY), event.wheel.y);
+            }
+            
+            // 如果UI没有处理滚轮事件，检查Ctrl键是否被按下进行缩放
+            if (!uiHandled && event.wheel.which != SDL_TOUCH_MOUSEID && (SDL_GetModState() & SDL_KMOD_CTRL)) {
                 // 根据滚轮方向调整缩放比例
                 float zoomChange = event.wheel.y * 0.1f; // 滚轮向上为正，向下为负
                 adjustZoomLevel(zoomChange);

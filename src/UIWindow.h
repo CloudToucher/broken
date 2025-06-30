@@ -76,6 +76,11 @@ private:
     float padding;            // 内边距
     bool autoResize;          // 是否自动调整窗口大小
     
+    // 滚动相关参数
+    float scrollOffset;       // 滚动偏移量（负值表示向上滚动）
+    float totalContentHeight; // 总内容高度
+    bool scrollEnabled;       // 是否启用滚动
+    
     // 文本换行相关方法
     std::vector<WrappedTextLine> wrapText(const std::string& text, TTF_Font* font, float maxWidth) const;
     float calculateTextWidth(const std::string& text, TTF_Font* font) const;
@@ -159,4 +164,19 @@ public:
     
     // 获取字体大小比例
     float getFontSizeRatio(UIElementType type) const;
+    
+    // 滚动相关方法
+    void setScrollEnabled(bool enabled) { scrollEnabled = enabled; }
+    bool getScrollEnabled() const { return scrollEnabled; }
+    void setScrollOffset(float offset);
+    float getScrollOffset() const { return scrollOffset; }
+    void scroll(float deltaY);
+    void scrollToTop();
+    void scrollToBottom();
+    float getTotalContentHeight() const { return totalContentHeight; }
+    bool canScrollUp() const;
+    bool canScrollDown() const;
+    
+    // 处理滚动事件
+    bool handleScroll(int mouseX, int mouseY, float scrollDelta);
 };

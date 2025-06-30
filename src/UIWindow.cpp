@@ -20,7 +20,10 @@ UIWindow::UIWindow(float x, float y, float width, float height, SDL_Color border
     maxContentWidth(400.0f),
     padding(20.0f),
     autoResize(false),
-    blocksEnabled(false) {
+    blocksEnabled(false),
+    scrollOffset(0.0f),
+    totalContentHeight(0.0f),
+    scrollEnabled(true) {
     // 字体将由GameUI设置
 }
 
@@ -244,6 +247,17 @@ int UIWindow::getElementAtPosition(int mouseX, int mouseY) const {
 
 bool UIWindow::handleClick(int mouseX, int mouseY, float windowWidth, float windowHeight) {
     if (!isVisible) return false;
+    
+    // 检查点击是否在滚动条区域（如果启用了滚动且内容超出窗口高度）
+    if (scrollEnabled && totalContentHeight > height) {
+        float scrollbarWidth = 8.0f;
+        float scrollbarX = x + width - scrollbarWidth - 2.0f;
+        if (mouseX >= scrollbarX && mouseX <= scrollbarX + scrollbarWidth &&
+            mouseY >= y && mouseY <= y + height) {
+            // 点击在滚动条区域，不处理元素点击
+            return true; // 消费事件但不触发元素点击
+        }
+    }
     
     // 获取点击位置下的元素索引
     int elementIndex = getElementAtPosition(mouseX, mouseY);
@@ -495,8 +509,12 @@ void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHei
     SDL_FRect borderRect = {x - 1, y - 1, width + 2, height + 2};
     SDL_RenderRect(renderer, &borderRect);
     
-    // 重置Y轴累计偏移量
-    currentYOffset = padding; // 使用标准间距
+    // 设置剪切区域以限制渲染在窗口内
+    SDL_Rect clipRect = {static_cast<int>(x), static_cast<int>(y), static_cast<int>(width), static_cast<int>(height)};
+    SDL_SetRenderClipRect(renderer, &clipRect);
+    
+    // 重置Y轴累计偏移量，应用滚动偏移
+    currentYOffset = padding - scrollOffset; // 使用标准间距并应用滚动偏移
     
     // 清空元素渲染区域映射
     elementRects.clear();
@@ -574,7 +592,7 @@ void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHei
         renderBlocks(renderer);
         
         // 重新渲染所有文本元素（在背景块之上）
-        currentYOffset = padding; // 重置Y偏移量
+        currentYOffset = padding - scrollOffset; // 重置Y偏移量并应用滚动偏移
         
         for (size_t i = 0; i < elements.size(); ++i) {
             const auto& element = elements[i];
@@ -628,6 +646,37 @@ void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHei
             float yOffsetRatio = getFontSizeRatio(element.getType());
             currentYOffset += element.getYOffset() * yOffsetRatio;
         }
+    }
+    
+    // 更新总内容高度用于滚动计算
+    totalContentHeight = currentYOffset + scrollOffset + padding;
+    
+    // 清除剪切区域
+    SDL_SetRenderClipRect(renderer, nullptr);
+    
+    // 如果启用滚动并且内容超出窗口高度，绘制滚动指示器
+    if (scrollEnabled && totalContentHeight > height) {
+        float scrollbarWidth = 8.0f;
+        float scrollbarHeight = height;
+        float scrollbarX = x + width - scrollbarWidth - 2.0f;
+        float scrollbarY = y;
+        
+        // 绘制滚动条背景
+        SDL_SetRenderDrawColor(renderer, 64, 64, 68, 180);
+        SDL_FRect scrollbarBg = {scrollbarX, scrollbarY, scrollbarWidth, scrollbarHeight};
+        SDL_RenderFillRect(renderer, &scrollbarBg);
+        
+        // 计算滚动条滑块的位置和大小
+        float contentRatio = height / totalContentHeight;
+        float thumbHeight = std::max(20.0f, scrollbarHeight * contentRatio);
+        float maxThumbOffset = scrollbarHeight - thumbHeight;
+        float scrollRatio = scrollOffset / (totalContentHeight - height);
+        float thumbY = scrollbarY + maxThumbOffset * scrollRatio;
+        
+        // 绘制滚动条滑块
+        SDL_SetRenderDrawColor(renderer, 128, 128, 132, 220);
+        SDL_FRect scrollbarThumb = {scrollbarX + 1.0f, thumbY, scrollbarWidth - 2.0f, thumbHeight};
+        SDL_RenderFillRect(renderer, &scrollbarThumb);
     }
 }
 
@@ -824,4 +873,59 @@ void UIWindow::renderBlocks(SDL_Renderer* renderer) {
     // 恢复渲染器状态
     SDL_SetRenderDrawColor(renderer, originalColor.r, originalColor.g, originalColor.b, originalColor.a);
     SDL_SetRenderDrawBlendMode(renderer, originalBlendMode);
+}
+
+// 滚动相关方法实现
+
+void UIWindow::setScrollOffset(float offset) {
+    if (!scrollEnabled) return;
+    
+    // 限制滚动范围
+    float maxScroll = std::max(0.0f, totalContentHeight - height);
+    scrollOffset = std::max(0.0f, std::min(offset, maxScroll));
+}
+
+void UIWindow::scroll(float deltaY) {
+    if (!scrollEnabled) return;
+    
+    setScrollOffset(scrollOffset + deltaY);
+}
+
+void UIWindow::scrollToTop() {
+    if (!scrollEnabled) return;
+    
+    scrollOffset = 0.0f;
+}
+
+void UIWindow::scrollToBottom() {
+    if (!scrollEnabled) return;
+    
+    float maxScroll = std::max(0.0f, totalContentHeight - height);
+    scrollOffset = maxScroll;
+}
+
+bool UIWindow::canScrollUp() const {
+    return scrollEnabled && scrollOffset > 0.0f;
+}
+
+bool UIWindow::canScrollDown() const {
+    if (!scrollEnabled) return false;
+    
+    float maxScroll = std::max(0.0f, totalContentHeight - height);
+    return scrollOffset < maxScroll;
+}
+
+bool UIWindow::handleScroll(int mouseX, int mouseY, float scrollDelta) {
+    if (!scrollEnabled) return false;
+    
+    // 检查鼠标是否在窗口内
+    if (mouseX < x || mouseX > x + width || mouseY < y || mouseY > y + height) {
+        return false;
+    }
+    
+    // 执行滚动 - 修复滚动方向（向上滚动应该显示上面的内容）
+    float scrollAmount = -scrollDelta * 30.0f; // 反转滚动方向并调整滚动速度
+    scroll(scrollAmount);
+    
+    return true; // 表示事件已处理
 }

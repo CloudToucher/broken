@@ -1,6 +1,7 @@
 #include "ItemLoader.h"
 #include "Storage.h"
 #include "MeleeWeapon.h"
+#include "Damage.h"
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -203,6 +204,21 @@ std::unique_ptr<Item> ItemLoader::createItem(const std::string& itemName) {
     newItem->setSlashingDefense(templateItem->getSlashingDefense());
     newItem->setBulletDefense(templateItem->getBulletDefense());
     newItem->setUsesRemaining(templateItem->getUsesRemaining());
+    
+    // 复制覆盖率信息
+    const auto& templateCoverageSlots = templateItem->getCoverageSlots();
+    for (const auto& coverage : templateCoverageSlots) {
+        newItem->addCoverageSlot(coverage.slot, coverage.coverage, coverage.burden);
+    }
+    
+    // 复制防护数据
+    const auto& templateProtectionData = templateItem->getProtectionData();
+    for (const auto& protection : templateProtectionData) {
+        newItem->addProtectionData(protection.bodyPart);
+        for (const auto& [damageType, protectionValue] : protection.protectionValues) {
+            newItem->setProtection(protection.bodyPart, damageType, protectionValue);
+        }
+    }
     
     // 复制存储空间
     for (size_t i = 0; i < templateItem->getStorageCount(); ++i) {

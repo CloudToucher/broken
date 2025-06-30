@@ -9,6 +9,7 @@
 #include "Magazine.h"
 #include "storage.h"
 #include "AttackSystem.h"
+#include "Damage.h"
 #include <iostream>
 #include <sstream>
 #include <set>
@@ -121,6 +122,7 @@ bool GameUI::initFonts() {
     itemTooltipWindow->setVisible(false);
     // 设置物品提示框窗口的字体
     itemTooltipWindow->setFonts(titleFont, subtitleFont, tooltipFont);
+    itemTooltipWindow->setScrollEnabled(false); // 禁用滚动，使用自动调整大小
     
 
     
@@ -133,6 +135,7 @@ bool GameUI::initFonts() {
         this->handleConfirmationClick(element);
     });
     confirmationWindow->setFonts(titleFont, subtitleFont, itemFont);
+    confirmationWindow->setScrollEnabled(true); // 启用滚动
     
     // 配置确认框的自动布局参数
     confirmationWindow->setAutoResize(true);
@@ -1013,7 +1016,10 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
         // 显示覆盖率信息
         auto coverageSlots = item->getCoverageSlots();
         if (!coverageSlots.empty()) {
-            details.push_back("覆盖部位:");
+            // 将所有覆盖部位信息合并到一行或几行
+            std::string coverageLine = "覆盖部位: ";
+            bool first = true;
+            
             for (const auto& coverage : coverageSlots) {
                 std::string slotName;
                 switch (coverage.slot) {
@@ -1032,17 +1038,26 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
                     case EquipSlot::BACK: slotName = "背部"; break;
                     default: slotName = "未知"; break;
                 }
-                std::string coverageInfo = "- " + slotName + ": " + std::to_string(coverage.coverage) + "%";
-                if (coverage.burden > 0) {
-                    coverageInfo += " (累赘值: " + std::to_string(coverage.burden) + ")";
+                
+                if (!first) {
+                    coverageLine += ", ";
                 }
-                details.push_back(coverageInfo);
+                
+                coverageLine += slotName + ":" + std::to_string(coverage.coverage) + "%";
+                if (coverage.burden > 0) {
+                    coverageLine += "(累赘:" + std::to_string(coverage.burden) + ")";
+                }
+                first = false;
             }
+            
+            details.push_back(coverageLine);
         } else {
             // 如果没有覆盖率信息，显示传统的装备槽位
             const auto& equipSlots = item->getEquipSlots();
             if (!equipSlots.empty()) {
-                details.push_back("装备槽位:");
+                std::string slotsLine = "装备槽位: ";
+                bool first = true;
+                
                 for (const auto& slot : equipSlots) {
                     std::string slotName;
                     switch (slot) {
@@ -1061,8 +1076,15 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
                         case EquipSlot::BACK: slotName = "背部"; break;
                         default: slotName = "未知"; break;
                     }
-                    details.push_back("- " + slotName);
+                    
+                    if (!first) {
+                        slotsLine += ", ";
+                    }
+                    slotsLine += slotName;
+                    first = false;
                 }
+                
+                details.push_back(slotsLine);
             }
         }
         
@@ -1091,22 +1113,31 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
                     default: partName = "未知"; break;
                 }
                 
-                details.push_back(partName + "防护:");
-                
-                // 显示各种伤害类型的防护值（只显示非零值）
+                // 收集该部位的所有防护值并在同一行显示
                 std::vector<DamageType> mainProtectionTypes = {
                     DamageType::BLUNT, DamageType::SLASH, DamageType::PIERCE,
                     DamageType::ELECTRIC, DamageType::BURN, DamageType::HEAT,
                     DamageType::COLD, DamageType::EXPLOSION, DamageType::SHOOTING
                 };
                 
+                std::string protectionLine = "- " + partName + ": ";
+                bool hasProtection = false;
+                
                 for (DamageType damageType : mainProtectionTypes) {
                     int protectionValue = protection.getProtection(damageType);
                     
                     if (protectionValue > 0) {
+                        if (hasProtection) {
+                            protectionLine += ", ";
+                        }
                         std::string damageTypeName = damageTypeToString(damageType);
-                        details.push_back("  " + damageTypeName + ": " + std::to_string(protectionValue));
+                        protectionLine += damageTypeName + ":" + std::to_string(protectionValue);
+                        hasProtection = true;
                     }
+                }
+                
+                if (hasProtection) {
+                    details.push_back(protectionLine);
                 }
             }
         }
@@ -2337,8 +2368,8 @@ void GameUI::updateHandSlotRect() {
             // 获取element的渲染区域
             if (currentWindow->getElementRect(handSlotElementIndex, handSlotRect)) {
                 handSlotRectValid = true;
-                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位区域更新: (%.1f,%.1f,%.1f,%.1f), 内容='%s'", 
-                           handSlotRect.x, handSlotRect.y, handSlotRect.width, handSlotRect.height, text.c_str());
+                //SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "手持位区域更新: (%.1f,%.1f,%.1f,%.1f), 内容='%s'", 
+                //           handSlotRect.x, handSlotRect.y, handSlotRect.width, handSlotRect.height, text.c_str());
             }
         } else {
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "索引2的element不是手持位element: '%s'", text.c_str());
@@ -2366,6 +2397,7 @@ void GameUI::initializeTabWindows() {
         this->onElementClick(element);
     });
     equipmentWindow->setFonts(titleFont, subtitleFont, itemFont);
+    equipmentWindow->setScrollEnabled(true); // 启用滚动
     
     // 创建血量情况窗口
     healthWindow = std::make_unique<UIWindow>(windowX, windowY, windowWidth, windowHeight, 
@@ -2375,6 +2407,7 @@ void GameUI::initializeTabWindows() {
         // 血量窗口的点击处理（暂时空实现）
     });
     healthWindow->setFonts(titleFont, subtitleFont, itemFont);
+    healthWindow->setScrollEnabled(true); // 启用滚动
     
     // 创建技能等级窗口
     skillsWindow = std::make_unique<UIWindow>(windowX, windowY, windowWidth, windowHeight, 
@@ -2384,6 +2417,7 @@ void GameUI::initializeTabWindows() {
         // 技能窗口的点击处理（暂时空实现）
     });
     skillsWindow->setFonts(titleFont, subtitleFont, itemFont);
+    skillsWindow->setScrollEnabled(true); // 启用滚动
 }
 
 // 切换到指定标签页
@@ -2886,4 +2920,34 @@ void GameUI::updateSkillsUI() {
         UIElement categorySpacer("", 0.0f, 20.0f, {0, 0, 0, 0}, UIElementType::TEXT);
         skillsWindow->addElement(categorySpacer);
     }
+}
+
+// 处理滚轮事件
+bool GameUI::handleScroll(int mouseX, int mouseY, float scrollDelta) {
+    // 如果UI不可见，不处理滚动事件
+    if (!isUIVisible) return false;
+    
+    // 首先检查物品提示框是否处理了滚动事件
+    if (itemTooltipWindow && itemTooltipWindow->getVisible()) {
+        if (itemTooltipWindow->handleScroll(mouseX, mouseY, scrollDelta)) {
+            return true;
+        }
+    }
+    
+    // 检查确认对话框是否处理了滚动事件
+    if (confirmationWindow && confirmationWindow->getVisible()) {
+        if (confirmationWindow->handleScroll(mouseX, mouseY, scrollDelta)) {
+            return true;
+        }
+    }
+    
+    // 检查当前标签页窗口是否处理了滚动事件
+    UIWindow* currentWindow = getCurrentTabWindow();
+    if (currentWindow && currentWindow->getVisible()) {
+        if (currentWindow->handleScroll(mouseX, mouseY, scrollDelta)) {
+            return true;
+        }
+    }
+    
+    return false; // 如果没有窗口处理滚动事件，返回false
 }
