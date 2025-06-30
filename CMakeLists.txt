@@ -50,12 +50,6 @@ add_custom_command(TARGET broken POST_BUILD
 
 # 复制资源文件夹
 add_custom_command(TARGET broken POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/map"
-        "$<TARGET_FILE_DIR:broken>/map"
-)
-
-add_custom_command(TARGET broken POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory  
         "${CMAKE_SOURCE_DIR}/jsons"
         "$<TARGET_FILE_DIR:broken>/jsons"
