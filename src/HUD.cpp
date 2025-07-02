@@ -65,13 +65,13 @@ void HUD::render(SDL_Renderer* renderer, int health, int currentAmmo, int maxAmm
         static_cast<int>(exitButton.x + 10), static_cast<int>(exitButton.y + exitButton.h - 10),
         static_cast<int>(exitButton.x + exitButton.w - 10), static_cast<int>(exitButton.y + 10));
     
-    // 绘制弹药信息（角色右下角）
+    // 绘制弹药信息（屏幕右下角）
     if (ammoFont && (maxAmmo > 0 || currentAmmo > 0)) {
         // 创建弹药文本
         std::string ammoText = std::to_string(currentAmmo) + "/" + std::to_string(maxAmmo);
         
-        // 设置文本颜色（橘黄色）
-        SDL_Color ammoColor = { 255, 165, 0, 255 }; // 橘黄色
+        // 设置文本颜色（白色半透明70%）
+        SDL_Color ammoColor = { 255, 255, 255, 179 }; // 白色，70%透明度 (255 * 0.7 = 179)
         
         // 创建文本表面 - 使用SDL3的API
         SDL_Surface* textSurface = TTF_RenderText_Solid(ammoFont, ammoText.c_str(), 0, ammoColor);
@@ -79,27 +79,15 @@ void HUD::render(SDL_Renderer* renderer, int health, int currentAmmo, int maxAmm
             // 创建纹理
             SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
             if (textTexture) {
-                // 获取角色屏幕位置
-                float playerScreenX = windowWidth / 2.0f; // 角色始终在屏幕中心
-                float playerScreenY = windowHeight / 2.0f;
-                
-                // 设置渲染位置（角色右下角）
+                // 设置渲染位置（屏幕右下角）
                 SDL_FRect textRect = { 
-                    playerScreenX + 40, // 角色右侧40像素处
-                    playerScreenY + 40, // 角色下方40像素处
+                    static_cast<float>(windowWidth - textSurface->w - 20), // 距离右边20像素
+                    static_cast<float>(windowHeight - textSurface->h - 20), // 距离底部20像素
                     static_cast<float>(textSurface->w), 
                     static_cast<float>(textSurface->h) 
                 };
                 
-                // 绘制半透明背景
-                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 128); // 半透明黑色
-                SDL_FRect bgRect = {
-                    textRect.x - 5, textRect.y - 3,
-                    textRect.w + 10, textRect.h + 6
-                };
-                SDL_RenderFillRect(renderer, &bgRect);
-                
-                // 渲染文本
+                // 无背景直接渲染文本
                 SDL_RenderTexture(renderer, textTexture, nullptr, &textRect);
                 
                 // 释放纹理
