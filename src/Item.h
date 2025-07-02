@@ -124,6 +124,11 @@ protected:
 
     // 唯一标识符
     std::string uniqueId;                  // 物品唯一标识符
+    
+    // 堆叠相关属性
+    bool stackable;                        // 是否可堆叠
+    int maxStackSize;                      // 最大堆叠数量
+    int stackSize;                         // 当前堆叠数量
 
 public:
     // 简化的构造函数，只需要基本属性
@@ -179,6 +184,22 @@ public:
     const std::string& getUniqueId() const { return uniqueId; }
     void setUniqueId(const std::string& id) { uniqueId = id; }
     void generateUniqueId(); // 生成唯一标识符
+    
+    // 堆叠相关方法
+    bool isStackable() const { return stackable; }
+    void setStackable(bool canStack) { stackable = canStack; }
+    int getMaxStackSize() const { return maxStackSize; }
+    void setMaxStackSize(int maxSize) { maxStackSize = maxSize; }
+    int getStackSize() const { return stackSize; }
+    void setStackSize(int size) { stackSize = std::max(1, std::min(size, maxStackSize)); }
+    
+    // 堆叠操作方法
+    bool canStackWith(const Item* other) const;        // 检查是否可以与另一个物品堆叠
+    int addToStack(int amount);                         // 添加到堆叠，返回实际添加的数量
+    int removeFromStack(int amount);                    // 从堆叠中移除，返回实际移除的数量
+    int getAvailableStackSpace() const;                // 获取可用的堆叠空间
+    bool isStackFull() const;                          // 检查堆叠是否已满
+    std::unique_ptr<Item> splitStack(int amount);      // 拆分堆叠，返回新的物品
     
     // 物品类别判断方法（通过ItemFlag实现）
     bool isWeapon() const { return hasFlag(ItemFlag::WEAPON); }

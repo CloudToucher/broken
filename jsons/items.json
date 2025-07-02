@@ -144,6 +144,9 @@
             "recoilMod": 0.0,
             "accuracyMod": 0.0,
             "ergoMod": 0.0,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         },
         {
@@ -160,6 +163,9 @@
             "recoilMod": 0.1,
             "accuracyMod": -0.05,
             "ergoMod": -0.05,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         },
         {
@@ -176,6 +182,9 @@
             "recoilMod": -0.1,
             "accuracyMod": -0.1,
             "ergoMod": 0.0,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         },
         {
@@ -192,6 +201,9 @@
             "recoilMod": 0.0,
             "accuracyMod": 0.0,
             "ergoMod": 0.0,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         },
         {
@@ -200,14 +212,55 @@
             "volume": 0.006,
             "length": 0.045,
             "value": 4,
-            "damage": 30,
+            "damage": 32,
             "ammoType": "5.56x45mm",
             "penetration": 40,
-            "range": 45.0,
+            "range": 42.0,
             "speed": 95.0,
             "recoilMod": 0.05,
-            "accuracyMod": -0.05,
-            "ergoMod": -0.05,
+            "accuracyMod": 0.0,
+            "ergoMod": 0.0,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
+            "flags": ["AMMO"]
+        },
+        {
+            "name": "5.56mm_MK262",
+            "weight": 0.011,
+            "volume": 0.006,
+            "length": 0.045,
+            "value": 6,
+            "damage": 40,
+            "ammoType": "5.56x45mm",
+            "penetration": 20,
+            "range": 45.0,
+            "speed": 85.0,
+            "recoilMod": -0.05,
+            "accuracyMod": 0.1,
+            "ergoMod": 0.0,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
+            "flags": ["AMMO"]
+        },
+        {
+            "name": "5.56mm_MK318",
+            "weight": 0.012,
+            "volume": 0.006,
+            "length": 0.045,
+            "value": 8,
+            "damage": 38,
+            "ammoType": "5.56x45mm",
+            "penetration": 35,
+            "range": 40.0,
+            "speed": 90.0,
+            "recoilMod": 0.0,
+            "accuracyMod": 0.0,
+            "ergoMod": 0.0,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         },
         {
@@ -224,38 +277,9 @@
             "recoilMod": 0.1,
             "accuracyMod": -0.1,
             "ergoMod": -0.1,
-            "flags": ["AMMO"]
-        },
-        {
-            "name": "5.56mm_MK318",
-            "weight": 0.015,
-            "volume": 0.006,
-            "length": 0.045,
-            "value": 6,
-            "damage": 40,
-            "ammoType": "5.56x45mm",
-            "penetration": 25,
-            "range": 55.0,
-            "speed": 85.0,
-            "recoilMod": -0.05,
-            "accuracyMod": 0.1,
-            "ergoMod": 0.0,
-            "flags": ["AMMO"]
-        },
-        {
-            "name": "5.56mm_MK262",
-            "weight": 0.016,
-            "volume": 0.006,
-            "length": 0.045,
-            "value": 7,
-            "damage": 35,
-            "ammoType": "5.56x45mm",
-            "penetration": 35,
-            "range": 60.0,
-            "speed": 83.0,
-            "recoilMod": -0.05,
-            "accuracyMod": 0.05,
-            "ergoMod": 0.05,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         },
         {
@@ -272,6 +296,9 @@
             "recoilMod": -0.2,
             "accuracyMod": -0.1,
             "ergoMod": 0.1,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         },
         {
@@ -288,6 +315,9 @@
             "recoilMod": 0.1,
             "accuracyMod": -0.15,
             "ergoMod": -0.05,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         },
         {
@@ -304,6 +334,9 @@
             "recoilMod": 0.0,
             "accuracyMod": 0.0,
             "ergoMod": 0.0,
+            "stackable": true,
+            "maxStackSize": 50,
+            "stackSize": 1,
             "flags": ["AMMO"]
         }
     ],

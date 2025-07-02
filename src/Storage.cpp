@@ -1,5 +1,7 @@
 #include "Storage.h"
 #include <algorithm>
+#include <map>
+#include <iostream>
 
 Storage::Storage(const std::string& name, float maxW, float maxV, float maxL, float accessT, int maxItems, bool expandsWithContents)
     : name(name), maxWeight(maxW), maxVolume(maxV), maxLength(maxL), accessTime(accessT), 
@@ -64,13 +66,46 @@ Storage& Storage::operator=(const Storage& other) {
 bool Storage::addItem(std::unique_ptr<Item> item) {
     if (!item) return false;
     
-    // 使用canFitItem方法进行统一检查
-    if (!canFitItem(item.get())) {
-        return false;
+    // 如果物品可堆叠，尝试与现有物品合并
+    if (item->isStackable()) {
+        // 查找名称相同的现有物品进行合并
+        for (auto& existingItem : items) {
+            if (existingItem && existingItem->isStackable() && 
+                existingItem->getName() == item->getName() && 
+                !existingItem->isStackFull()) {
+                
+                // 计算可以添加的数量
+                int toAdd = item->getStackSize();
+                int actuallyAdded = existingItem->addToStack(toAdd);
+                
+                if (actuallyAdded > 0) {
+                    // 减少要添加物品的数量
+                    item->removeFromStack(actuallyAdded);
+                    
+                    // 如果全部合并了，更新容器大小并返回成功
+                    if (item->getStackSize() <= 0) {
+                        updateContainerSize();
+                        return true;
+                    }
+                    // 如果还有剩余，继续寻找其他可合并的物品
+                }
+            }
+        }
+        
+        // 如果还有物品没有合并完，检查是否可以添加新物品
+        if (item->getStackSize() > 0) {
+            if (!canFitItem(item.get())) {
+                return false;
+            }
+            items.push_back(std::move(item));
+        }
+    } else {
+        // 非堆叠物品直接添加
+        if (!canFitItem(item.get())) {
+            return false;
+        }
+        items.push_back(std::move(item));
     }
-    
-    // 添加物品
-    items.push_back(std::move(item));
     
     // 更新容器的当前重量和体积
     updateContainerSize();
@@ -254,4 +289,128 @@ bool Storage::canFitItem(const Item* item) const {
     }
     
     return true;
+}
+
+// 堆叠相关方法实现
+bool Storage::tryStackItem(std::unique_ptr<Item>& item) {
+    if (!item || !item->isStackable()) {
+        return false;
+    }
+    
+    // 查找可以堆叠的现有物品
+    for (auto& existingItem : items) {
+        if (existingItem && existingItem->canStackWith(item.get()) && !existingItem->isStackFull()) {
+            int toAdd = item->getStackSize();
+            int actuallyAdded = existingItem->addToStack(toAdd);
+            
+            if (actuallyAdded > 0) {
+                item->removeFromStack(actuallyAdded);
+                
+                // 如果全部堆叠完毕
+                if (item->getStackSize() <= 1) {
+                    item.reset(); // 释放物品
+                    updateContainerSize();
+                    return true;
+                }
+            }
+        }
+    }
+    
+    return false; // 没有找到可堆叠的物品或堆叠未完成
+}
+
+std::vector<int> Storage::findStackableItems(const Item* item) const {
+    std::vector<int> result;
+    if (!item || !item->isStackable()) {
+        return result;
+    }
+    
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (items[i] && items[i]->canStackWith(item) && !items[i]->isStackFull()) {
+            result.push_back(static_cast<int>(i));
+        }
+    }
+    
+    return result;
+}
+
+// 整理合并同名物品
+void Storage::consolidateItems() {
+    std::cout << "开始整理合并物品..." << std::endl;
+    int originalCount = items.size();
+    
+    // 使用map来按名称分组物品
+    std::map<std::string, std::vector<std::unique_ptr<Item>>> itemGroups;
+    
+    // 将所有物品按名称分组
+    for (auto& item : items) {
+        if (item) {
+            itemGroups[item->getName()].push_back(std::move(item));
+        }
+    }
+    
+    // 清空原items列表
+    items.clear();
+    
+    int mergedCount = 0;
+    
+    // 处理每个分组
+    for (auto& [itemName, itemList] : itemGroups) {
+        if (itemList.empty()) continue;
+        
+        // 检查第一个物品是否可堆叠
+        bool canStack = itemList[0]->isStackable();
+        
+        if (canStack && itemList.size() > 1) {
+            std::cout << "合并物品: " << itemName << " (共" << itemList.size() << "个)";
+            
+            // 计算总数量
+            int totalStack = 0;
+            for (auto& item : itemList) {
+                totalStack += item->getStackSize();
+            }
+            
+            std::cout << " -> 总数量: " << totalStack << std::endl;
+            
+            // 取第一个物品作为基础，设置最大堆叠数
+            auto& baseItem = itemList[0];
+            int maxStackSize = baseItem->getMaxStackSize();
+            bool baseItemUsed = false;
+            
+            // 如果总数量超过最大堆叠数，需要分成多个堆叠
+            while (totalStack > 0) {
+                int currentStackSize = std::min(totalStack, maxStackSize);
+                
+                if (!baseItemUsed) {
+                    // 使用第一个物品
+                    baseItem->setStackSize(currentStackSize);
+                    items.push_back(std::move(baseItem));
+                    baseItemUsed = true;
+                } else {
+                    // 创建新的物品副本（使用clone方法确保正确的类型）
+                    auto newItem = std::unique_ptr<Item>(items.back()->clone());
+                    newItem->setStackSize(currentStackSize);
+                    items.push_back(std::move(newItem));
+                }
+                
+                totalStack -= currentStackSize;
+            }
+            
+            mergedCount += itemList.size();
+        } else {
+            // 不可堆叠或只有一个物品，直接添加
+            for (auto& item : itemList) {
+                items.push_back(std::move(item));
+            }
+        }
+    }
+    
+    // 更新容器大小
+    updateContainerSize();
+    
+    if (mergedCount > 0) {
+        std::cout << "整理完成: " << originalCount << " -> " << items.size() << " 个物品" << std::endl;
+    } else {
+        std::cout << "无需整理，当前物品数: " << items.size() << std::endl;
+    }
 }

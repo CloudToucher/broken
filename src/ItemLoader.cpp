@@ -239,6 +239,11 @@ std::unique_ptr<Item> ItemLoader::createItem(const std::string& itemName) {
         }
     }
     
+    // 复制堆叠属性
+    newItem->setStackable(templateItem->isStackable());
+    newItem->setMaxStackSize(templateItem->getMaxStackSize());
+    newItem->setStackSize(templateItem->getStackSize());
+    
     return newItem;
 }
 
@@ -437,6 +442,11 @@ std::unique_ptr<Ammo> ItemLoader::createAmmo(const std::string& ammoName) {
     newAmmo->setModAccuracyMOA(templateAmmo->getModAccuracyMOA());
     newAmmo->setModErgonomics(templateAmmo->getModErgonomics());
     
+    // 复制堆叠属性
+    newAmmo->setStackable(templateAmmo->isStackable());
+    newAmmo->setMaxStackSize(templateAmmo->getMaxStackSize());
+    newAmmo->setStackSize(templateAmmo->getStackSize());
+    
     // 复制装备槽位
     for (const auto& slot : templateAmmo->getEquipSlots()) {
         newAmmo->addEquipSlot(slot);
@@ -494,6 +504,19 @@ std::unique_ptr<Item> ItemLoader::loadItemFromJson(const json& itemJson) {
         if (itemJson.contains("volume")) item->setVolume(itemJson["volume"]);
         if (itemJson.contains("length")) item->setLength(itemJson["length"]);
         if (itemJson.contains("value")) item->setValue(itemJson["value"]);
+        
+        // 设置堆叠属性
+        if (itemJson.contains("stackable")) {
+            item->setStackable(itemJson["stackable"]);
+        }
+        
+        if (itemJson.contains("maxStackSize")) {
+            item->setMaxStackSize(itemJson["maxStackSize"]);
+        }
+        
+        if (itemJson.contains("stackSize")) {
+            item->setStackSize(itemJson["stackSize"]);
+        }
         
         // 先加载装备槽位，再加载标签
         // 加载装备槽位（向后兼容）
@@ -904,6 +927,25 @@ std::unique_ptr<Ammo> ItemLoader::loadAmmoFromJson(const json& ammoJson) {
         // 加载标签
         if (ammoJson.contains("flags") && ammoJson["flags"].is_array()) {
             loadItemFlags(ammo.get(), ammoJson["flags"]);
+        }
+        
+        // 设置堆叠属性（在标签加载之后，避免被processFlags()影响）
+        if (ammoJson.contains("stackable")) {
+            ammo->setStackable(ammoJson["stackable"]);
+        } else {
+            ammo->setStackable(true); // 弹药默认可堆叠
+        }
+        
+        if (ammoJson.contains("maxStackSize")) {
+            ammo->setMaxStackSize(ammoJson["maxStackSize"]);
+        } else {
+            ammo->setMaxStackSize(50); // 弹药默认最大堆叠50发
+        }
+        
+        if (ammoJson.contains("stackSize")) {
+            ammo->setStackSize(ammoJson["stackSize"]);
+        } else {
+            ammo->setStackSize(1); // 默认数量为1
         }
         
         return ammo;

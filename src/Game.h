@@ -244,6 +244,9 @@ public:
     
     // 测试背包中的弹药
     void testAmmoInInventory();
+    
+    // 测试堆叠系统
+    void testStackingSystem();
 };
 
 #endif // GAME_H

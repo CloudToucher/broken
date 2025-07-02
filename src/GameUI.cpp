@@ -34,6 +34,11 @@ std::string getItemTextWithTags(Item* item) {
     
     std::string text = item->getName();
     
+    // 如果物品可堆叠且数量大于1，显示数量
+    if (item->isStackable() && item->getStackSize() > 1) {
+        text += " (x" + std::to_string(item->getStackSize()) + ")";
+    }
+    
     // 添加标签
     std::vector<std::string> tags;
     
@@ -155,6 +160,20 @@ void GameUI::onElementClick(const UIElement& element) {
             // 切换折叠状态
             storage->setIsCollapsed(!storage->getIsCollapsed());
             // 使用当前玩家引用更新UI
+            updatePlayerUI();
+        }
+        return;
+    }
+    
+    // 检查是否是刷新按钮（显示为⟲）
+    if (element.getText() == "⟲") {
+        // 这是刷新按钮，dataPtr指向Storage*
+        Storage* storage = static_cast<Storage*>(element.getDataPtr());
+        if (storage) {
+            std::cout << "刷新整理存储空间: " << storage->getName() << std::endl;
+            // 调用整理合并方法
+            storage->consolidateItems();
+            // 更新UI显示
             updatePlayerUI();
         }
         return;
@@ -472,8 +491,17 @@ void GameUI::updatePlayerUI(Player* player) {
         // 添加折叠/展开按钮 - 放在存储空间信息前面，这样会显示在同一行
         // 考虑到UIElement的X坐标会被fontSizeRatio(1.3)缩放，需要预先除以缩放比例
         float fontSizeRatio = 1.3f; // TEXT类型的字体大小比例
-        float targetButtonX = currentWindow->getWidth() - 40.0f; // 目标位置
+        float targetButtonX = currentWindow->getWidth() - 40.0f; // 折叠按钮目标位置
         float buttonX = targetButtonX / fontSizeRatio; // 补偿缩放效果
+        
+        // 添加刷新按钮（在折叠按钮左边）
+        float refreshButtonX = (targetButtonX - 40.0f) / fontSizeRatio; // 刷新按钮位置
+        UIElement refreshButton("⟲", refreshButtonX, 0.0f, 
+                               SDL_Color{150, 200, 255, 255}, // 淡蓝色
+                               UIElementType::TEXT);
+        refreshButton.setDataPtr(storage);
+        currentWindow->addElement(refreshButton);
+        
         //SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "折叠按钮位置: 窗体宽度=%.1f, 目标X=%.1f, 补偿后X=%.1f, 比例=%.1f", 
         //           currentWindow->getWidth(), targetButtonX, buttonX, fontSizeRatio);
         UIElement collapseButton(storage->getIsCollapsed() ? "+" : "-", buttonX, 0.0f, 
@@ -802,10 +830,10 @@ void GameUI::updateHoveredItem(int mouseX, int mouseY) {
         if (elementIndex >= 0) {
                 const auto& elements = currentWindow->getElements();
             if (elementIndex < static_cast<int>(elements.size())) {
-                // 检查元素文本，如果是折叠/展开按钮（+或-），则不将其视为物品
+                // 检查元素文本，如果是折叠/展开按钮（+或-）或刷新按钮（⟲），则不将其视为物品
                 const std::string& text = elements[elementIndex].getText();
-                if (text != "+" && text != "-") {
-                    // 只有非折叠按钮的元素才可能是物品
+                if (text != "+" && text != "-" && text != "⟲") {
+                    // 只有非功能按钮的元素才可能是物品
                     hoveredItem = static_cast<Item*>(elements[elementIndex].getDataPtr());
                     }
                 }
@@ -1438,10 +1466,10 @@ bool GameUI::handleClick(int mouseX, int mouseY, Player* player, float windowWid
         if (elementIndex >= 0) {
                 const auto& elements = currentWindow->getElements();
             if (elementIndex < static_cast<int>(elements.size())) {
-                // 检查元素文本，如果是折叠/展开按钮（+或-），则不将其视为物品
+                // 检查元素文本，如果是折叠/展开按钮（+或-）或刷新按钮（⟲），则不将其视为物品
                 const std::string& text = elements[elementIndex].getText();
-                if (text != "+" && text != "-") {
-                    // 只有非折叠按钮的元素才可能是物品
+                if (text != "+" && text != "-" && text != "⟲") {
+                    // 只有非功能按钮的元素才可能是物品
                     Item* clickedItem = static_cast<Item*>(elements[elementIndex].getDataPtr());
                     if (clickedItem) {
                         // 检查是否点击的是已装备的物品
@@ -1578,8 +1606,8 @@ Storage* GameUI::findStorageByCoordinates(int x, int y) {
         }
         
         // 首先检查数据指针是否直接指向Storage
-        // 这种情况通常出现在折叠/展开按钮上
-        if (elements[elementIndex].getText() == "+" || elements[elementIndex].getText() == "-") {
+        // 这种情况通常出现在折叠/展开按钮和刷新按钮上
+        if (elements[elementIndex].getText() == "+" || elements[elementIndex].getText() == "-" || elements[elementIndex].getText() == "⟲") {
             return static_cast<Storage*>(dataPtr);
         }
         

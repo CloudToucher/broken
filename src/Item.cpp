@@ -29,7 +29,10 @@ Item::Item(const std::string& itemName,
       slashingDefense(0.0f),
       bulletDefense(0.0f),
       usesRemaining(1.0f),
-      uniqueId("") {
+      uniqueId(""),
+      stackable(false),
+      maxStackSize(1),
+      stackSize(1) {
     // 不再默认添加NONE槽位，让物品初始没有装备槽位
     // 装备槽位将通过addEquipSlot方法添加
     
@@ -66,7 +69,10 @@ Item::Item(const Item& other)
       bluntDefense(other.bluntDefense),
       slashingDefense(other.slashingDefense),
       bulletDefense(other.bulletDefense),
-      usesRemaining(other.usesRemaining) {
+      usesRemaining(other.usesRemaining),
+      stackable(other.stackable),
+      maxStackSize(other.maxStackSize),
+      stackSize(other.stackSize) {
     // 深拷贝存储空间
     for (const auto& storage : other.storages) {
         if (storage) {
@@ -106,6 +112,9 @@ Item& Item::operator=(const Item& other) {
         slashingDefense = other.slashingDefense;
         bulletDefense = other.bulletDefense;
         usesRemaining = other.usesRemaining;
+        stackable = other.stackable;
+        maxStackSize = other.maxStackSize;
+        stackSize = other.stackSize;
         
         // 清空当前存储空间
         storages.clear();
@@ -484,5 +493,69 @@ std::vector<EquipSlot> Item::getProtectedBodyParts() const {
         parts.push_back(data.bodyPart);
     }
     return parts;
+}
+
+// 堆叠相关方法实现
+bool Item::canStackWith(const Item* other) const {
+    if (!other || !stackable || !other->stackable) {
+        return false;
+    }
+    
+    // 只要名称相同就可以堆叠
+    return name == other->name;
+}
+
+int Item::addToStack(int amount) {
+    if (!stackable || amount <= 0) {
+        return 0;
+    }
+    
+    int available = maxStackSize - stackSize;
+    int toAdd = std::min(amount, available);
+    stackSize += toAdd;
+    
+    return toAdd;
+}
+
+int Item::removeFromStack(int amount) {
+    if (!stackable || amount <= 0) {
+        return 0;
+    }
+    
+    int toRemove = std::min(amount, stackSize);
+    stackSize -= toRemove;
+    
+    // 确保stackSize不会小于0
+    if (stackSize < 0) {
+        stackSize = 0;
+    }
+    
+    return toRemove;
+}
+
+int Item::getAvailableStackSpace() const {
+    if (!stackable) {
+        return 0;
+    }
+    return maxStackSize - stackSize;
+}
+
+bool Item::isStackFull() const {
+    return stackable && (stackSize >= maxStackSize);
+}
+
+std::unique_ptr<Item> Item::splitStack(int amount) {
+    if (!stackable || amount <= 0 || amount >= stackSize) {
+        return nullptr;
+    }
+    
+    // 创建新物品作为拆分结果
+    auto newItem = std::make_unique<Item>(*this);
+    newItem->setStackSize(amount);
+    
+    // 从当前堆叠中移除对应数量
+    stackSize -= amount;
+    
+    return newItem;
 }
 

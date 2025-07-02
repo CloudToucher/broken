@@ -115,6 +115,11 @@ public:
     
     // 检查是否可以容纳指定物品
     bool canFitItem(const Item* item) const;
+    
+    // 堆叠相关方法
+    bool tryStackItem(std::unique_ptr<Item>& item);         // 尝试将物品堆叠到现有物品上
+    std::vector<int> findStackableItems(const Item* item) const; // 查找可以堆叠的物品索引
+    void consolidateItems();                                 // 整理合并同名物品
 };
 
 #endif // STORAGE_H

@@ -21,6 +21,7 @@
 #include <random>
 #include <chrono>
 #include <algorithm>
+#include <map>
 
 // 数学常量
 #ifndef M_PI
@@ -738,6 +739,28 @@ void Game::handleEvents() {
                 break;
             case SDLK_F8: // F8键测试背包弹药
                 testAmmoInInventory();
+                break;
+            case SDLK_F9: // F9键测试堆叠系统并生成弹药集群
+                std::cout << "F9键被按下，开始测试堆叠系统..." << std::endl;
+                testStackingSystem();
+                // 初始化并生成弹药集群
+                initItemSpawnClusters();
+                if (ammoSpawnCluster) {
+                    std::cout << "生成弹药集群..." << std::endl;
+                    spawnItemsFromCluster(ammoSpawnCluster);
+                }
+                break;
+            case SDLK_F10: // F10键测试整理所有存储空间
+                std::cout << "F10键被按下，整理所有存储空间..." << std::endl;
+                if (player) {
+                    auto storagePairs = player->getAllAvailableStorages();
+                    for (auto& pair : storagePairs) {
+                        if (pair.second) {
+                            std::cout << "整理存储空间: " << pair.second->getName() << std::endl;
+                            pair.second->consolidateItems();
+                        }
+                    }
+                }
                 break;
             case SDLK_TAB: // Tab键切换背包界面
                 togglePlayerUI();
@@ -1459,9 +1482,19 @@ void Game::spawnItemsFromCluster(const std::shared_ptr<ItemSpawnCluster>& cluste
     // 生成物品名称列表
     std::vector<std::string> itemNames = cluster->generateItems();
 
-    // 通过ItemLoader创建实际的物品并添加到玩家背包
+    // 统计每种物品的数量
+    std::map<std::string, int> itemCounts;
     for (const auto& itemName : itemNames) {
+        itemCounts[itemName]++;
+    }
+
+    std::cout << "生成物品集群，共 " << itemNames.size() << " 个物品，" << itemCounts.size() << " 种类型" << std::endl;
+
+    // 为每种物品创建一个实例，设置正确的堆叠数量
+    for (const auto& [itemName, count] : itemCounts) {
         std::unique_ptr<Item> item = nullptr;
+        
+        std::cout << "创建物品: " << itemName << " x" << count << std::endl;
         
         // 尝试不同的创建方法，优先使用专门的方法
         if (ItemLoader::getInstance()->hasAmmoTemplate(itemName)) {
@@ -1500,6 +1533,42 @@ void Game::spawnItemsFromCluster(const std::shared_ptr<ItemSpawnCluster>& cluste
         }
         
         if (item && player) {
+            // 如果物品可堆叠，设置正确的数量
+            if (item->isStackable()) {
+                item->setStackSize(count);
+                std::cout << "设置堆叠数量: " << item->getName() << " = " << item->getStackSize() << std::endl;
+            } else if (count > 1) {
+                // 如果物品不可堆叠但数量大于1，创建多个实例
+                std::cout << "物品不可堆叠，创建 " << count << " 个实例: " << item->getName() << std::endl;
+                for (int i = 0; i < count; ++i) {
+                    if (i == 0) {
+                        // 第一个实例直接使用
+                        player->addItem(std::move(item));
+                    } else {
+                        // 创建额外的实例
+                        std::unique_ptr<Item> additionalItem = nullptr;
+                        if (ItemLoader::getInstance()->hasAmmoTemplate(itemName)) {
+                            additionalItem = ItemLoader::getInstance()->createAmmo(itemName);
+                        } else if (ItemLoader::getInstance()->hasGunTemplate(itemName)) {
+                            additionalItem = ItemLoader::getInstance()->createGun(itemName);
+                        } else if (ItemLoader::getInstance()->hasMagazineTemplate(itemName)) {
+                            additionalItem = ItemLoader::getInstance()->createMagazine(itemName);
+                        } else if (ItemLoader::getInstance()->hasGunModTemplate(itemName)) {
+                            additionalItem = ItemLoader::getInstance()->createGunMod(itemName);
+                        } else if (ItemLoader::getInstance()->hasWeaponTemplate(itemName)) {
+                            additionalItem = ItemLoader::getInstance()->createWeapon(itemName);
+                        } else {
+                            additionalItem = ItemLoader::getInstance()->createItem(itemName);
+                        }
+                        
+                        if (additionalItem) {
+                            player->addItem(std::move(additionalItem));
+                        }
+                    }
+                }
+                continue; // 跳过下面的addItem调用
+            }
+            
             // 将物品添加到玩家的存储空间中
             player->addItem(std::move(item));
         } else {
@@ -2331,4 +2400,114 @@ void Game::testAmmoInInventory() {
     
     std::cout << "\n总共检查了 " << totalItemCount << " 个物品，找到 " << ammoCount << " 个弹药物品" << std::endl;
     std::cout << "=== 弹药测试完成 ===" << std::endl;
+}
+
+// 测试堆叠功能
+void Game::testStackingSystem() {
+    std::cout << "\n=== 堆叠系统测试 ===" << std::endl;
+    
+    // 获取ItemLoader实例
+    ItemLoader* loader = ItemLoader::getInstance();
+    if (!loader) {
+        std::cout << "错误：无法获取ItemLoader实例" << std::endl;
+        return;
+    }
+    
+    // 创建一个临时存储空间用于测试
+    auto testStorage = std::make_unique<Storage>("测试存储空间", 100.0f, 100.0f, 100.0f);
+    
+    std::cout << "\n--- 测试1: 创建可堆叠物品 ---" << std::endl;
+    
+    // 测试创建弹药
+    auto ammo1 = loader->createAmmo("9mm_PST");
+    if (ammo1) {
+        std::cout << "创建弹药: " << ammo1->getName() << std::endl;
+        std::cout << "  可堆叠: " << (ammo1->isStackable() ? "是" : "否") << std::endl;
+        std::cout << "  最大堆叠数: " << ammo1->getMaxStackSize() << std::endl;
+        std::cout << "  当前数量: " << ammo1->getStackSize() << std::endl;
+    }
+    
+    std::cout << "\n--- 测试2: 堆叠操作 ---" << std::endl;
+    
+    // 创建多个相同弹药
+    auto ammo2 = loader->createAmmo("9mm_PST");
+    auto ammo3 = loader->createAmmo("9mm_PST");
+    
+    if (ammo1 && ammo2 && ammo3) {
+        // 修改第二个弹药的数量
+        ammo2->setStackSize(10);
+        ammo3->setStackSize(5);
+        
+        std::cout << "弹药1数量: " << ammo1->getStackSize() << std::endl;
+        std::cout << "弹药2数量: " << ammo2->getStackSize() << std::endl;
+        std::cout << "弹药3数量: " << ammo3->getStackSize() << std::endl;
+        
+        // 测试canStackWith
+        std::cout << "弹药1和弹药2能否堆叠: " << (ammo1->canStackWith(ammo2.get()) ? "是" : "否") << std::endl;
+        
+        // 测试添加到堆叠
+        int added = ammo1->addToStack(ammo2->getStackSize());
+        std::cout << "向弹药1添加弹药2的数量，实际添加: " << added << std::endl;
+        std::cout << "弹药1新数量: " << ammo1->getStackSize() << std::endl;
+    }
+    
+    std::cout << "\n--- 测试3: 存储空间自动堆叠 ---" << std::endl;
+    
+    // 重新创建弹药用于存储测试
+    auto ammo_a = loader->createAmmo("9mm_PST");
+    auto ammo_b = loader->createAmmo("9mm_PST");
+    auto ammo_c = loader->createAmmo("9mm_PST");
+    
+    if (ammo_a && ammo_b && ammo_c) {
+        // 设置不同数量
+        ammo_a->setStackSize(20);
+        ammo_b->setStackSize(15);
+        ammo_c->setStackSize(10);
+        
+        std::cout << "存储前物品数量:" << std::endl;
+        std::cout << "  弹药A: " << ammo_a->getStackSize() << std::endl;
+        std::cout << "  弹药B: " << ammo_b->getStackSize() << std::endl;
+        std::cout << "  弹药C: " << ammo_c->getStackSize() << std::endl;
+        
+        // 添加到存储空间（应该自动堆叠）
+        bool added1 = testStorage->addItem(std::move(ammo_a));
+        bool added2 = testStorage->addItem(std::move(ammo_b));
+        bool added3 = testStorage->addItem(std::move(ammo_c));
+        
+        std::cout << "\n添加结果:" << std::endl;
+        std::cout << "  弹药A添加: " << (added1 ? "成功" : "失败") << std::endl;
+        std::cout << "  弹药B添加: " << (added2 ? "成功" : "失败") << std::endl;
+        std::cout << "  弹药C添加: " << (added3 ? "成功" : "失败") << std::endl;
+        
+        std::cout << "\n存储空间内容:" << std::endl;
+        std::cout << "  物品数量: " << testStorage->getItemCount() << std::endl;
+        
+        for (size_t i = 0; i < testStorage->getItemCount(); ++i) {
+            Item* item = testStorage->getItem(i);
+            if (item) {
+                std::cout << "  物品" << (i+1) << ": " << item->getName();
+                if (item->isStackable()) {
+                    std::cout << " (x" << item->getStackSize() << ")";
+                }
+                std::cout << std::endl;
+            }
+        }
+    }
+    
+    std::cout << "\n--- 测试4: 不同类型弹药不堆叠 ---" << std::endl;
+    
+    auto ammo_pst = loader->createAmmo("9mm_PST");
+    auto ammo_ap = loader->createAmmo("9mm_AP");
+    
+    if (ammo_pst && ammo_ap) {
+        std::cout << "9mm_PST和9mm_AP能否堆叠: " << (ammo_pst->canStackWith(ammo_ap.get()) ? "是" : "否") << std::endl;
+        
+        // 添加到存储空间
+        testStorage->addItem(std::move(ammo_pst));
+        testStorage->addItem(std::move(ammo_ap));
+        
+        std::cout << "存储空间最终物品数量: " << testStorage->getItemCount() << std::endl;
+    }
+    
+    std::cout << "\n=== 堆叠系统测试完成 ===" << std::endl;
 }
