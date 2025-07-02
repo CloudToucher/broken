@@ -19,6 +19,16 @@ protected:
     float modRangeBonus = 0.0f;            // 射程影响（米）
     float modBulletSpeedBonus = 0.0f;      // 子弹速度影响（米/秒）
     float modPenetrationBonus = 0.0f;      // 穿透力加成（百分比）
+    
+    // 新增：槽位容量影响
+    std::map<std::string, int> slotCapacityModifiers;  // 对其他槽位容量的修改
+    
+    // 新增：弹药类型影响
+    std::vector<std::string> addedAmmoTypes;           // 新增支持的弹药类型
+    std::vector<std::string> removedAmmoTypes;         // 移除支持的弹药类型
+    
+    // 新增：兼容的槽位类型（通过flag确定）
+    std::vector<std::string> compatibleSlots;         // 可以安装到的槽位类型
 
 public:
     // 构造函数
@@ -58,6 +68,31 @@ public:
                          float recoil = 0.0f, float ergonomics = 0.0f, 
                          float breathStability = 0.0f, float range = 0.0f,
                          float bulletSpeed = 0.0f, float penetrationBonus = 0.0f);
+    
+    // 新增：槽位容量修改
+    void addSlotCapacityModifier(const std::string& slotType, int modifier);
+    void removeSlotCapacityModifier(const std::string& slotType);
+    const std::map<std::string, int>& getSlotCapacityModifiers() const;
+    void clearSlotCapacityModifiers();
+    
+    // 新增：弹药类型修改
+    void addAmmoTypeSupport(const std::string& ammoType);
+    void removeAmmoTypeSupport(const std::string& ammoType);
+    void addAmmoTypeRestriction(const std::string& ammoType);
+    void removeAmmoTypeRestriction(const std::string& ammoType);
+    const std::vector<std::string>& getAddedAmmoTypes() const;
+    const std::vector<std::string>& getRemovedAmmoTypes() const;
+    void clearAmmoTypeChanges();
+    
+    // 新增：槽位兼容性
+    void addCompatibleSlot(const std::string& slotType);
+    void removeCompatibleSlot(const std::string& slotType);
+    const std::vector<std::string>& getCompatibleSlots() const;
+    bool canAttachToSlot(const std::string& slotType) const;
+    void clearCompatibleSlots();
+    
+    // 新增：从Flag自动确定兼容槽位
+    void updateCompatibleSlotsFromFlags();
     
     // 拷贝构造函数
     GunMod(const GunMod& other);

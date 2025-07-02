@@ -108,6 +108,46 @@ enum class ItemFlag {
     LASER,              // 带激光瞄准器
     FLASHLIGHT,         // 带手电筒
     
+    // 新增：配件槽位类型标识（用于替代AttachmentSlot枚举）
+    SLOT_STOCK,         // 枪托槽位
+    SLOT_BARREL,        // 枪管槽位
+    SLOT_UNDER_BARREL,  // 下挂槽位
+    SLOT_GRIP,          // 握把槽位
+    SLOT_OPTIC,         // 瞄准镜槽位
+    SLOT_SIDE_MOUNT,    // 侧挂槽位
+    SLOT_MUZZLE,        // 枪口槽位
+    SLOT_MAGAZINE_WELL, // 弹匣井槽位
+    SLOT_RAIL,          // 导轨槽位
+    SLOT_SPECIAL,       // 特殊槽位
+    
+    // 新增：弹药口径标识
+    CALIBER_5_56,       // 5.56毫米口径
+    CALIBER_7_62,       // 7.62毫米口径
+    CALIBER_9MM,        // 9毫米口径
+    CALIBER_45ACP,      // .45 ACP口径
+    CALIBER_12GA,       // 12号霰弹
+    CALIBER_308,        // .308口径
+    CALIBER_22LR,       // .22 LR口径
+    CALIBER_50BMG,      // .50 BMG口径
+    
+    // 新增：兼容性标识
+    ACCEPTS_5_56,       // 接受5.56毫米弹药
+    ACCEPTS_7_62,       // 接受7.62毫米弹药
+    ACCEPTS_9MM,        // 接受9毫米弹药
+    ACCEPTS_45ACP,      // 接受.45 ACP弹药
+    ACCEPTS_12GA,       // 接受12号霰弹
+    ACCEPTS_308,        // 接受.308弹药
+    ACCEPTS_22LR,       // 接受.22 LR弹药
+    ACCEPTS_50BMG,      // 接受.50 BMG弹药
+    
+    // 新增：特殊功能标识
+    ADDS_RAIL_SLOTS,    // 增加导轨槽位
+    CHANGES_CALIBER,    // 改变口径
+    BIPOD,              // 脚架
+    SUPPRESSER,         // 消音器
+    COMPENSATOR,        // 枪口制退器
+    FLASH_HIDER,        // 消焰器
+    
     // 必须是最后一个元素，用于循环计数
     FLAG_COUNT
 };
@@ -207,6 +247,48 @@ inline std::string GetItemFlagName(ItemFlag flag) {
         // 其他特性标签
         case ItemFlag::SILENCED: return "消音";
         case ItemFlag::SCOPE: return "带瞄准镜";
+        case ItemFlag::LASER: return "激光瞄准器";
+        case ItemFlag::FLASHLIGHT: return "手电筒";
+        
+        // 新增：配件槽位类型标识
+        case ItemFlag::SLOT_STOCK: return "枪托槽位";
+        case ItemFlag::SLOT_BARREL: return "枪管槽位";
+        case ItemFlag::SLOT_UNDER_BARREL: return "下挂槽位";
+        case ItemFlag::SLOT_GRIP: return "握把槽位";
+        case ItemFlag::SLOT_OPTIC: return "瞄准镜槽位";
+        case ItemFlag::SLOT_SIDE_MOUNT: return "侧挂槽位";
+        case ItemFlag::SLOT_MUZZLE: return "枪口槽位";
+        case ItemFlag::SLOT_MAGAZINE_WELL: return "弹匣井槽位";
+        case ItemFlag::SLOT_RAIL: return "导轨槽位";
+        case ItemFlag::SLOT_SPECIAL: return "特殊槽位";
+        
+        // 新增：弹药口径标识
+        case ItemFlag::CALIBER_5_56: return "5.56毫米口径";
+        case ItemFlag::CALIBER_7_62: return "7.62毫米口径";
+        case ItemFlag::CALIBER_9MM: return "9毫米口径";
+        case ItemFlag::CALIBER_45ACP: return ".45 ACP口径";
+        case ItemFlag::CALIBER_12GA: return "12号霰弹";
+        case ItemFlag::CALIBER_308: return ".308口径";
+        case ItemFlag::CALIBER_22LR: return ".22 LR口径";
+        case ItemFlag::CALIBER_50BMG: return ".50 BMG口径";
+        
+        // 新增：兼容性标识
+        case ItemFlag::ACCEPTS_5_56: return "接受5.56毫米";
+        case ItemFlag::ACCEPTS_7_62: return "接受7.62毫米";
+        case ItemFlag::ACCEPTS_9MM: return "接受9毫米";
+        case ItemFlag::ACCEPTS_45ACP: return "接受.45 ACP";
+        case ItemFlag::ACCEPTS_12GA: return "接受12号霰弹";
+        case ItemFlag::ACCEPTS_308: return "接受.308";
+        case ItemFlag::ACCEPTS_22LR: return "接受.22 LR";
+        case ItemFlag::ACCEPTS_50BMG: return "接受.50 BMG";
+        
+        // 新增：特殊功能标识
+        case ItemFlag::ADDS_RAIL_SLOTS: return "增加导轨槽位";
+        case ItemFlag::CHANGES_CALIBER: return "改变口径";
+        case ItemFlag::BIPOD: return "脚架";
+        case ItemFlag::SUPPRESSER: return "消音器";
+        case ItemFlag::COMPENSATOR: return "枪口制退器";
+        case ItemFlag::FLASH_HIDER: return "消焰器";
         
         default: return "未知标签";
     }

@@ -5,10 +5,15 @@
 
 // 简化构造函数
 Magazine::Magazine(const std::string& itemName)
-    : Item(itemName),
-      compatibleAmmoTypes(), maxCapacity(0), unloadTime(0.0f), reloadTime(0.0f) {
+    : GunMod(itemName),
+      compatibleAmmoTypes(), maxCapacity(0), unloadTime(0.0f), reloadTime(0.0f), modReloadTime(0.0f) {
     // 添加弹匣相关标签
     addFlag(ItemFlag::MAGAZINE);
+    addFlag(ItemFlag::GUNMOD);
+    addFlag(ItemFlag::MOD_MAGAZINE_WELL);
+    
+    // 设置为弹匣井配件
+    addCompatibleSlot("MAGAZINE_WELL");
 }
 
 const std::vector<std::string>& Magazine::getCompatibleAmmoTypes() const {
@@ -72,11 +77,12 @@ int Magazine::getCapacity() const {
 
 // 实现拷贝构造函数
 Magazine::Magazine(const Magazine& other)
-    : Item(other),
+    : GunMod(other),
       compatibleAmmoTypes(other.compatibleAmmoTypes),
       maxCapacity(other.maxCapacity),
       unloadTime(other.unloadTime),
-      reloadTime(other.reloadTime) {
+      reloadTime(other.reloadTime),
+      modReloadTime(other.modReloadTime) {
     // 不复制弹药栈，新创建的弹匣为空
     // currentAmmo默认为空栈
 }
@@ -84,11 +90,12 @@ Magazine::Magazine(const Magazine& other)
 // 实现拷贝赋值运算符
 Magazine& Magazine::operator=(const Magazine& other) {
     if (this != &other) {
-        Item::operator=(other);
+        GunMod::operator=(other);
         compatibleAmmoTypes = other.compatibleAmmoTypes;
         maxCapacity = other.maxCapacity;
         unloadTime = other.unloadTime;
         reloadTime = other.reloadTime;
+        modReloadTime = other.modReloadTime;
         
         // 清空当前弹药栈
         while (!currentAmmo.empty()) {
@@ -99,4 +106,20 @@ Magazine& Magazine::operator=(const Magazine& other) {
         // currentAmmo保持为空栈
     }
     return *this;
+}
+
+// 新增：配件影响方法实现
+void Magazine::setModReloadTime(float reloadTimeModifier) {
+    modReloadTime = reloadTimeModifier;
+}
+
+float Magazine::getModReloadTime() const {
+    return modReloadTime;
+}
+
+// 新增：重写设置方法，同时更新配件影响
+void Magazine::updateModReloadTime() {
+    // 根据弹匣自身的装填时间计算对枪械换弹时间的影响
+    // 这里可以根据需要调整计算逻辑
+    modReloadTime = reloadTime - 2.0f; // 假设标准换弹时间是2秒，快速弹匣可以减少时间
 }
