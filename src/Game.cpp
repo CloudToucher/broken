@@ -394,20 +394,6 @@ bool Game::init() {
                 std::cout << "Successfully loaded items from JSON!" << std::endl;
             }
 
-            // --- 为玩家生成一把砍刀 ---
-            if (player) {
-                // 使用通用的MeleeWeapon类，通过JSON配置驱动
-                auto meleeWeapon = ItemLoader::getInstance()->createMeleeWeapon("军用砍刀");
-                if (meleeWeapon) {
-                    meleeWeapon->setRarity(ItemRarity::COMMON);
-                    
-                                // 将砍刀装备到玩家手上
-            player->equipItem(std::move(meleeWeapon));
-            std::cout << "Player equipped with MeleeWeapon: 军用砍刀 (data-driven creation)." << std::endl;
-        } else {
-            std::cout << "Failed to create MeleeWeapon: 军用砍刀" << std::endl;
-        }
-        
         // 设置测试技能数据：建造等级5级70%，闪避18级
         if (player && player->getSkillSystem()) {
             // 5级70%意味着总经验值为：5*100 + 70 = 570
@@ -417,101 +403,170 @@ bool Game::init() {
             // 18级闪避：18*100 = 1800经验值
             player->getSkillSystem()->addExperience(SkillType::DODGE, 1800);
             std::cout << "测试数据：闪避技能设置为18级" << std::endl;
-                }
-            }
+        }
             
-            /*
-            // --- 为玩家生成一把测试枪 --- (暂时注释掉，专注测试砍刀)
+            // === 为玩家生成HK416测试装备 ===
             if (player) {
-                // 1. 使用ItemLoader创建一把枪
-                auto testGun = ItemLoader::getInstance()->createGun("HK416");
-                if (testGun) {
-                    // 设置稀有度
-                    testGun->setRarity(ItemRarity::EPIC);
+                std::cout << "\n=== 开始创建HK416测试装备 ===" << std::endl;
+                
+                // 1. 创建HK416枪械
+                auto hk416 = ItemLoader::getInstance()->createGun("HK416");
+                if (hk416) {
+                    hk416->setRarity(ItemRarity::EPIC);
+                    std::cout << "✓ 成功创建HK416" << std::endl;
 
-                    // 2. 使用ItemLoader创建一个弹匣
-                    auto testMagazine = ItemLoader::getInstance()->createMagazine("StandardRifleMag");
+                    // 2. 创建消音器并安装
+                    auto suppressor = ItemLoader::getInstance()->createGunMod("消音器");
+                    if (suppressor) {
+                        suppressor->setRarity(ItemRarity::RARE);
+                        if (hk416->attach("MUZZLE", std::move(suppressor))) {
+                            std::cout << "✓ 成功安装消音器到HK416" << std::endl;
+                        } else {
+                            std::cout << "✗ 安装消音器失败" << std::endl;
+                        }
+                    }
 
-                    // 3. 为弹匣装填子弹
-                    if (testMagazine) {
-                        for (int i = 0; i < 20; ++i) { // 装填20发测试子弹
+                    // 3. 创建弹匣并装填满子弹，然后装到枪上
+                    auto mainMagazine = ItemLoader::getInstance()->createMagazine("StandardRifleMag");
+                    if (mainMagazine) {
+                        std::cout << "✓ 创建主弹匣，容量: " << mainMagazine->getCapacity() << std::endl;
+                        
+                        // 检查弹匣兼容的弹药类型
+                        const auto& compatibleAmmoTypes = mainMagazine->getCompatibleAmmoTypes();
+                        std::cout << "弹匣兼容弹药类型: ";
+                        for (const auto& ammoType : compatibleAmmoTypes) {
+                            std::cout << ammoType << " ";
+                        }
+                        std::cout << std::endl;
+                        
+                        // 装填满30发5.56mm_M855
+                        int loadedCount = 0;
+                        for (int i = 0; i < 30; ++i) {
                             auto ammo = ItemLoader::getInstance()->createAmmo("5.56mm_M855");
-                            if (ammo && !testMagazine->loadAmmo(std::move(ammo))) {
-                                break; // 弹匣满了
+                            if (ammo) {
+                                std::cout << "创建子弹 " << i << ": " << ammo->getName() 
+                                          << ", 弹药类型: " << ammo->getAmmoType() << std::endl;
+                                
+                                // 检查是否可以装入弹匣
+                                if (mainMagazine->canAcceptAmmo(ammo->getAmmoType())) {
+                                    std::cout << "  ✓ 弹匣可接受此弹药类型" << std::endl;
+                                } else {
+                                    std::cout << "  ✗ 弹匣无法接受此弹药类型" << std::endl;
+                                }
+                                
+                                if (mainMagazine->loadAmmo(std::move(ammo))) {
+                                    loadedCount++;
+                                    std::cout << "  ✓ 子弹装入成功，当前数量: " << mainMagazine->getCurrentAmmoCount() << std::endl;
+                                } else {
+                                    std::cout << "  ✗ 子弹装入失败，弹匣是否满了: " << mainMagazine->isFull() << std::endl;
+                                    break; // 弹匣满了或不兼容
+                                }
+                            } else {
+                                std::cout << "✗ 创建子弹失败" << std::endl;
+                                break;
                             }
                         }
+                        std::cout << "✓ 主弹匣装填完成，共装填" << loadedCount << "发子弹，当前弹匣数量: " << mainMagazine->getCurrentAmmoCount() << std::endl;
+
+                        // 将弹匣装到枪上并上膛
+                        std::cout << "尝试将弹匣装载到HK416..." << std::endl;
+                        
+                        // 检查HK416是否可以接受这个弹匣
+                        if (hk416->canAcceptMagazine(mainMagazine.get())) {
+                            std::cout << "✓ HK416可以接受此弹匣" << std::endl;
+                        } else {
+                            std::cout << "✗ HK416无法接受此弹匣" << std::endl;
+                        }
+                        
+                        hk416->loadMagazine(std::move(mainMagazine));
+                        
+                        // 检查弹匣是否真的装载成功
+                        if (hk416->getCurrentMagazine()) {
+                            std::cout << "✓ 弹匣装载成功，弹匣名称: " << hk416->getCurrentMagazine()->getName() 
+                                      << ", 子弹数: " << hk416->getCurrentMagazine()->getCurrentAmmoCount() << std::endl;
+                        } else {
+                            std::cout << "✗ 弹匣装载失败，getCurrentMagazine()返回nullptr" << std::endl;
+                        }
+                        
+                        hk416->chamberManually(); // 手动上膛第一发
+                        
+                        // 检查上膛是否成功
+                        if (hk416->getChamberedRound()) {
+                            std::cout << "✓ 手动上膛成功，膛内子弹: " << hk416->getChamberedRound()->getName() << std::endl;
+                        } else {
+                            std::cout << "✗ 手动上膛失败，膛内无子弹" << std::endl;
+                        }
+                        
+                        std::cout << "✓ 弹匣装载完成，枪械已上膛" << std::endl;
                     }
 
-                    // 4. 将弹匣装到枪上并上膛
-                    if (testMagazine) {
-                        testGun->loadMagazine(std::move(testMagazine));
-                        testGun->chamberManually(); // 手动上膛第一发
-                    }
-
-                    // 5. 将枪交给玩家
-                    player->equipItem(std::move(testGun)); // 注意：枪械使用普通的equipItem方法，因为它们是手持物品
-                    std::cout << "Player equipped with HK416." << std::endl;
+                    // 4. 将HK416交给玩家手持
+                    player->equipItem(std::move(hk416));
+                    std::cout << "✓ 玩家装备HK416完成" << std::endl;
+                } else {
+                    std::cout << "✗ 创建HK416失败" << std::endl;
                 }
 
-                // 6. 创建额外的弹匣并添加到玩家背包
-                // 创建三个额外弹匣，分别装填不同类型的子弹
+                // 5. 创建三个装满子弹的弹匣放在弹挂里
+                std::cout << "\n--- 为弹挂创建额外弹匣 ---" << std::endl;
                 std::vector<std::string> ammoTypes = { "5.56mm_M855", "5.56mm_M855A1", "5.56mm_M995" };
-                std::vector<int> ammoCount = { 15, 10, 30 }; // 每个弹匣装填的子弹数量
+                std::vector<std::string> ammoNames = { "M855标准弹", "M855A1穿甲弹", "M995高级穿甲弹" };
+                
+                // 获取弹挂装备
+                auto equippedItems = player->getEquipmentSystem()->getAllEquippedItems();
+                Item* magazineCarrier = nullptr;
+                for (Item* item : equippedItems) {
+                    if (item && item->getName() == "弹挂") {
+                        magazineCarrier = item;
+                        break;
+                    }
+                }
+                
+                if (magazineCarrier) {
+                    for (int i = 0; i < 3; ++i) {
+                        auto extraMag = ItemLoader::getInstance()->createMagazine("StandardRifleMag");
+                        if (extraMag) {
+                            extraMag->setRarity(ItemRarity::EPIC);
 
-                for (int i = 0; i < 3; ++i) {
-                    auto extraMag = ItemLoader::getInstance()->createMagazine("StandardRifleMag");
-                    if (extraMag) {
-                        // 设置稀有度
-                        extraMag->setRarity(ItemRarity::EPIC);
+                            // 装填满30发子弹
+                            for (int j = 0; j < 30; ++j) {
+                                auto ammo = ItemLoader::getInstance()->createAmmo(ammoTypes[i]);
+                                if (ammo && !extraMag->loadAmmo(std::move(ammo))) {
+                                    break; // 弹匣满了
+                                }
+                            }
 
-                        // 装填子弹
-                        for (int j = 0; j < ammoCount[i]; ++j) {
-                            auto ammo = ItemLoader::getInstance()->createAmmo(ammoTypes[i]);
-                            if (ammo && !extraMag->loadAmmo(std::move(ammo))) {
-                                break; // 弹匣满了
+                            // 添加到弹挂的第i个弹匣包
+                            Storage* magPouch = magazineCarrier->getStorage(i);
+                            if (magPouch && magPouch->addItem(std::move(extraMag))) {
+                                std::cout << "✓ 弹匣包" << (i+1) << "添加装满" << ammoNames[i] << "的弹匣" << std::endl;
+                            } else {
+                                std::cout << "✗ 无法添加弹匣到弹挂包" << (i+1) << std::endl;
                             }
                         }
-
-                        // 添加到玩家背包
-                        player->addItem(std::move(extraMag));
-                        std::cout << "Added magazine with " << ammoTypes[i] << " ammo to player inventory." << std::endl;
                     }
+                } else {
+                    std::cout << "✗ 未找到弹挂装备，无法添加额外弹匣" << std::endl;
                 }
-            }
-            // --- 测试枪生成结束 ---
 
-            // 使用ItemLoader创建一个消音器并安装到玩家的枪上
-            auto suppressor = ItemLoader::getInstance()->createGunMod("Silencer");
-            auto laser = ItemLoader::getInstance()->createGunMod("SureFireX400U");
-            if (suppressor) {
-                suppressor->setRarity(ItemRarity::RARE);
-
-                // 获取玩家的枪并安装消音器
-                if (player) {
-                    Gun* playerGun = dynamic_cast<Gun*>(player->getHeldItem());
-                    if (playerGun) {
-                        // 安装消音器到枪的枪口位置
-                        if (playerGun->attach(AttachmentSlot::MUZZLE, std::move(suppressor))) {
-                            std::cout << "Silencer attached to player's gun." << std::endl;
-                        }
-                        else {
-                            std::cout << "Failed to attach silencer to player's gun." << std::endl;
-                            // 如果安装失败，将消音器添加到玩家背包
-                            player->addItem(std::move(suppressor));
-                        }
-                        playerGun->attach(AttachmentSlot::RAIL, std::move(laser));
+                // 6. 将军用砍刀放入背包而不是手持
+                std::cout << "\n--- 将军用砍刀放入背包 ---" << std::endl;
+                auto militaryMachete = ItemLoader::getInstance()->createMeleeWeapon("军用砍刀");
+                if (militaryMachete) {
+                    militaryMachete->setRarity(ItemRarity::COMMON);
+                    
+                    // 添加到玩家的最大存储空间（背包）
+                    if (player->storeItemInLargestStorage(std::move(militaryMachete))) {
+                        std::cout << "✓ 军用砍刀已放入背包" << std::endl;
+                    } else {
+                        std::cout << "✗ 背包空间不足，无法放入军用砍刀" << std::endl;
                     }
-                    else {
-                        std::cout << "Player has no gun equipped." << std::endl;
-                        // 将消音器添加到玩家背包
-                        player->addItem(std::move(suppressor));
-                    }
+                } else {
+                    std::cout << "✗ 创建军用砍刀失败" << std::endl;
                 }
+
+                std::cout << "=== HK416测试装备创建完成 ===\n" << std::endl;
             }
-            else {
-                std::cout << "Failed to create silencer from ItemLoader." << std::endl;
-            }
-            */
 
 
             // 生成一些丧尸
@@ -992,35 +1047,21 @@ void Game::render() {
     // 恢复原始缩放以渲染HUD
     SDL_SetRenderScale(renderer, 1.0f, 1.0f);
 
-    // 获取当前弹药信息（砍刀测试期间暂时不需要）
+    // 获取当前弹药信息
     int currentAmmo = 0;
     int maxAmmo = 0;
     
     Item* heldItem = player->getHeldItem();
-    if (heldItem && heldItem->hasFlag(ItemFlag::WEAPON)) {
-        // 检查是否是近战武器
-        if (heldItem->hasFlag(ItemFlag::MELEE)) {
-            // 近战武器不需要弹药信息，保持默认值
-            currentAmmo = 0;
-            maxAmmo = 0;
-        }
-        /*
-        // 枪械处理代码（暂时注释掉）
+    if (heldItem && heldItem->hasFlag(ItemFlag::GUN)) {
+        // 枪械处理代码
         Gun* gun = static_cast<Gun*>(heldItem);
         if (gun) {  // 添加gun的空指针检查
             Magazine* mag = gun->getCurrentMagazine();
             
             if (mag) {
                 try {
-                    // 检查Magazine的有效性
-                    if (mag->isValid()) {
-                        currentAmmo = mag->getCurrentAmmoCount();
-                        maxAmmo = mag->getCapacity();
-                    } else {
-                        std::cerr << "Magazine对象无效，使用默认值" << std::endl;
-                        currentAmmo = 0;
-                        maxAmmo = 0;
-                    }
+                    currentAmmo = mag->getCurrentAmmoCount();
+                    maxAmmo = mag->getCapacity();
                 } catch (...) {
                     // 如果访问Magazine时发生异常，使用默认值
                     std::cerr << "访问Magazine时发生异常，使用默认值" << std::endl;
@@ -1036,7 +1077,10 @@ void Game::render() {
             // 更新和渲染准星状态
             updateAndRenderCrosshair(renderer, mouseX, mouseY, gun);
         }
-        */
+    } else if (heldItem && heldItem->hasFlag(ItemFlag::MELEE)) {
+        // 近战武器不需要弹药信息，保持默认值
+        currentAmmo = 0;
+        maxAmmo = 0;
     }
     
     // 显示默认鼠标指针（砍刀不需要特殊准星）

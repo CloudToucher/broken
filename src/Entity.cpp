@@ -67,16 +67,15 @@ float Entity::reloadWeaponAuto(Gun* weapon) {
     // 计算预期的总换弹时间（用于返回值）
     float totalReloadTime = 0.0f;
     
-    // 获取枪支兼容的弹药类型
-    std::vector<std::string> compatibleTypes;
-    if (weapon->getCurrentMagazine()) {
-        compatibleTypes = weapon->getCurrentMagazine()->getCompatibleAmmoTypes();
-        totalReloadTime += weapon->getCurrentMagazine()->getUnloadTime(); // 卸载时间
-    } else {
-        // 如果没有弹匣，尝试从枪支获取兼容类型
-        // 这里假设Gun类有一个方法可以获取兼容的弹药类型
-        // compatibleTypes = weapon->getAcceptedAmmoTypes();
+    // 获取枪支兼容的弹药类型 - 使用新的动态弹药类型系统
+    std::vector<std::string> compatibleTypes = weapon->getEffectiveAmmoTypes();
+    if (compatibleTypes.empty()) {
         return 0.0f; // 无法确定兼容类型
+    }
+    
+    // 如果当前有弹匣，添加卸载时间
+    if (weapon->getCurrentMagazine()) {
+        totalReloadTime += weapon->getCurrentMagazine()->getUnloadTime();
     }
 
     // 在所有存储空间中查找最满的兼容弹匣
@@ -85,8 +84,12 @@ float Entity::reloadWeaponAuto(Gun* weapon) {
         return 0.0f; // 没有找到兼容的弹匣
     }
     
-    // 添加装填时间
-    totalReloadTime += fullestMag->getReloadTime();
+    // 添加装填时间 - 考虑弹匣作为GunMod的换弹时间影响
+    float effectiveReloadTime = fullestMag->getReloadTime();
+    if (fullestMag->getModReloadTime() != 0.0f) {
+        effectiveReloadTime += fullestMag->getModReloadTime();
+    }
+    totalReloadTime += effectiveReloadTime;
     
     // 如果需要上膛，添加上膛时间
     if (!weapon->getChamberedRound()) {
@@ -966,35 +969,40 @@ void Entity::reloadWeaponWithActions(Gun* weapon) {
         return;
     }
     
-    // 获取枪支兼容的弹药类型
-    std::vector<std::string> compatibleTypes;
-    if (weapon->getCurrentMagazine()) {
-        compatibleTypes = weapon->getCurrentMagazine()->getCompatibleAmmoTypes();
-    } else {
-        // 如果没有弹匣，尝试从枪支获取兼容类型
-        // 这里假设Gun类有一个方法可以获取兼容的弹药类型
-        // compatibleTypes = weapon->getAcceptedAmmoTypes();
+    // 获取枪支兼容的弹药类型 - 使用新的动态弹药类型系统
+    std::vector<std::string> compatibleTypes = weapon->getEffectiveAmmoTypes();
+    if (compatibleTypes.empty()) {
         return; // 无法确定兼容类型
     }
     
-    // 在所有存储空间中查找最满的兼容弹匣
+    // 在所有存储空间中查找最满的兼容弹匣，并记录其Storage
     Magazine* fullestMag = findFullestMagazine(compatibleTypes);
     if (!fullestMag) {
         return; // 没有找到兼容的弹匣
     }
     
+    // 找到弹匣所在的Storage
+    Storage* magazineStorage = nullptr;
+    auto magazineItems = findItemsByCategory(ItemFlag::MAGAZINE);
+    for (const auto& [slot, storage, index, item] : magazineItems) {
+        if (item == fullestMag) {
+            magazineStorage = storage;
+            break;
+        }
+    }
+    
     // 创建一系列行为并添加到队列
     
-    // 1. 如果当前有弹匣，先卸下
+    // 1. 如果当前有弹匣，先卸下 - 卸下的弹匣会放回同一个Storage
     if (weapon->getCurrentMagazine()) {
-        // 创建卸下弹匣的行为
-        actionQueue->addAction(std::make_unique<UnloadMagazineAction>(this, weapon));
+        // 创建卸下弹匣的行为，传递Storage参数以计算正确时间
+        actionQueue->addAction(std::make_unique<UnloadMagazineAction>(this, weapon, magazineStorage));
     }
     
     // 2. 装入新弹匣 - 从存储空间中移除弹匣并获取其所有权
     std::unique_ptr<Magazine> magPtr = removeMagazine(fullestMag);
     if (magPtr) {
-        actionQueue->addAction(std::make_unique<LoadMagazineAction>(this, weapon, std::move(magPtr)));
+        actionQueue->addAction(std::make_unique<LoadMagazineAction>(this, weapon, std::move(magPtr), magazineStorage));
     }
     
     // 3. 如果需要上膛，添加上膛行为

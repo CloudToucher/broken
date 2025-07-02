@@ -63,14 +63,18 @@ void Action::interrupt() {
 }
 
 // UnloadMagazineAction实现
-UnloadMagazineAction::UnloadMagazineAction(Entity* entity, Gun* gun, std::function<void(std::unique_ptr<Magazine>)> callback)
-    : Action(entity, gun && gun->getCurrentMagazine() ? gun->getCurrentMagazine()->getUnloadTime() : 0.0f, 
+UnloadMagazineAction::UnloadMagazineAction(Entity* entity, Gun* gun, Storage* storage, std::function<void(std::unique_ptr<Magazine>)> callback)
+    : Action(entity, 
+             gun && gun->getCurrentMagazine() ? 
+                 (gun->getReloadTime() + gun->getCurrentMagazine()->getUnloadTime() + (storage ? storage->getStorageTime() : 0.0f)) : 
+                 0.0f,
              EntityState::UNLOADING, "unload"),
       weapon(gun), onMagazineUnloaded(callback) {
 }
 
 void UnloadMagazineAction::start() {
     if (!isStarted && owner && weapon && weapon->getCurrentMagazine()) {
+        std::cout << "开始卸下弹匣，预计时间: " << duration << " 秒" << std::endl;
         Action::start();
     } else {
         // 如果没有弹匣，直接标记为完成
@@ -95,13 +99,18 @@ void UnloadMagazineAction::end() {
 }
 
 // LoadMagazineAction实现
-LoadMagazineAction::LoadMagazineAction(Entity* entity, Gun* gun, std::unique_ptr<Magazine> mag)
-    : Action(entity, mag ? mag->getReloadTime() : 0.0f, EntityState::RELOADING, "reload"),
+LoadMagazineAction::LoadMagazineAction(Entity* entity, Gun* gun, std::unique_ptr<Magazine> mag, Storage* storage)
+    : Action(entity, 
+             mag && gun ? 
+                 (gun->getReloadTime() + mag->getReloadTime() + mag->getModReloadTime() + (storage ? storage->getStorageTime() : 0.0f)) : 
+                 0.0f, 
+             EntityState::RELOADING, "reload"),
       weapon(gun), magazine(std::move(mag)) {
 }
 
 void LoadMagazineAction::start() {
     if (!isStarted && owner && weapon && magazine && weapon->canAcceptMagazine(magazine.get())) {
+        std::cout << "开始装填弹匣，预计时间: " << duration << " 秒" << std::endl;
         Action::start();
     } else {
         // 如果无法装填弹匣，直接标记为完成
@@ -112,7 +121,7 @@ void LoadMagazineAction::start() {
 
 void LoadMagazineAction::end() {
     if (isStarted && !isCompleted) {
-        // 装填弹匣
+        // 装填弹匣 - 考虑Magazine作为GunMod的特性，但保持传统装填方式
         if (weapon && magazine) {
             weapon->loadMagazine(std::move(magazine));
         }
@@ -135,6 +144,7 @@ void ChamberRoundAction::start() {
             if (wasEmpty) {
                 soundId = "bolt_release";
             }
+            std::cout << "开始上膛，预计时间: " << duration << " 秒" << std::endl;
             Action::start();
         } else {
             // 如果无法上膛，直接标记为完成

@@ -270,14 +270,13 @@ std::unique_ptr<Gun> ItemLoader::createGun(const std::string& gunName) {
     newGun->setValue(templateGun->getValue());
     
     // 设置枪械特有属性
-    newGun->setGunType(templateGun->getGunType());
     newGun->setBaseFireRate(templateGun->getBaseFireRate());
     newGun->setBaseAccuracyMOA(templateGun->getBaseAccuracyMOA());
-    newGun->setAvailableFiringModes(std::vector<FiringMode>{templateGun->getCurrentFiringMode()}); // 简化处理，只复制当前射击模式
+    newGun->setAvailableFiringModes(std::vector<std::string>{templateGun->getCurrentFiringMode()}); // 简化处理，只复制当前射击模式
     newGun->setBaseRecoil(templateGun->getBaseRecoil());
     newGun->setBaseErgonomics(templateGun->getBaseErgonomics());
     newGun->setBaseBreathStability(templateGun->getBaseBreathStability());
-    newGun->setAcceptedAmmoTypes(std::vector<std::string>{}); // 简化处理，暂不复制弹药类型
+    newGun->setBaseAcceptedAmmoTypes(templateGun->getBaseAcceptedAmmoTypes()); // 从模板正确复制弹药类型
     newGun->setBaseSoundLevel(templateGun->getBaseSoundLevel());
     newGun->setBaseDamageBonus(templateGun->getBaseDamageBonus());
     newGun->setBaseRangeBonus(templateGun->getBaseRangeBonus());
@@ -298,9 +297,8 @@ std::unique_ptr<Gun> ItemLoader::createGun(const std::string& gunName) {
     }
     
     // 复制配件槽位容量
-    for (const auto& [slot, capacity] : templateGun->getSlotCapacity()) {
-        newGun->setSlotCapacity(slot, capacity);
-    }
+    // 注意：由于槽位系统已重构为字符串，这里简化处理
+    newGun->initAttachmentSlots(); // 初始化默认槽位
     
     // 复制可接受的弹匣名称列表
     newGun->setAcceptedMagazineNames(templateGun->getAcceptedMagazineNames());
@@ -649,21 +647,7 @@ std::unique_ptr<Gun> ItemLoader::loadGunFromJson(const json& gunJson) {
         if (gunJson.contains("length")) gun->setLength(gunJson["length"]);
         if (gunJson.contains("value")) gun->setValue(gunJson["value"]);
         
-        // 设置枪械类型
-        GunType gunType = GunType::PISTOL; // 默认值
-        if (gunJson.contains("gunType") && gunJson["gunType"].is_string()) {
-            std::string typeStr = gunJson["gunType"];
-            if (typeStr == "PISTOL") gunType = GunType::PISTOL;
-            else if (typeStr == "REVOLVER") gunType = GunType::REVOLVER;
-            else if (typeStr == "SMG") gunType = GunType::SMG;
-            else if (typeStr == "SHOTGUN") gunType = GunType::SHOTGUN;
-            else if (typeStr == "RIFLE") gunType = GunType::RIFLE;
-            else if (typeStr == "SNIPER_RIFLE") gunType = GunType::SNIPER_RIFLE;
-            else if (typeStr == "DMR") gunType = GunType::DMR;
-            else if (typeStr == "MACHINE_GUN") gunType = GunType::MACHINE_GUN;
-            else if (typeStr == "GRENADE_LAUNCHER") gunType = GunType::GRENADE_LAUNCHER;
-        }
-        gun->setGunType(gunType);
+        // 枪械类型现在通过标签(flags)设置，不再需要单独的枚举类型设置
         
         // 设置枪械基础属性
         if (gunJson.contains("fireRate")) gun->setBaseFireRate(gunJson["fireRate"]);
@@ -678,20 +662,17 @@ std::unique_ptr<Gun> ItemLoader::loadGunFromJson(const json& gunJson) {
         if (gunJson.contains("penetrationBonus")) gun->setBasePenetrationBonus(gunJson["penetrationBonus"]);
         
         // 设置射击模式
-        std::vector<FiringMode> firingModes;
+        std::vector<std::string> firingModes;
         if (gunJson.contains("firingModes") && gunJson["firingModes"].is_array()) {
             for (const auto& modeJson : gunJson["firingModes"]) {
                 if (modeJson.is_string()) {
                     std::string modeStr = modeJson;
-                    if (modeStr == "SEMI_AUTO") firingModes.push_back(FiringMode::SEMI_AUTO);
-                    else if (modeStr == "FULL_AUTO") firingModes.push_back(FiringMode::FULL_AUTO);
-                    else if (modeStr == "BOLT_ACTION") firingModes.push_back(FiringMode::BOLT_ACTION);
-                    else if (modeStr == "BURST") firingModes.push_back(FiringMode::BURST);
+                    firingModes.push_back(modeStr);
                 }
             }
         }
         if (firingModes.empty()) {
-            firingModes.push_back(FiringMode::SEMI_AUTO); // 默认半自动
+            firingModes.push_back("SEMI_AUTO"); // 默认半自动
         }
         gun->setAvailableFiringModes(firingModes);
         
@@ -704,7 +685,7 @@ std::unique_ptr<Gun> ItemLoader::loadGunFromJson(const json& gunJson) {
                 }
             }
         }
-        gun->setAcceptedAmmoTypes(ammoTypes);
+        gun->setBaseAcceptedAmmoTypes(ammoTypes);
         
         // 设置兼容弹匣名称列表
         std::vector<std::string> magazineNames;
@@ -734,24 +715,8 @@ std::unique_ptr<Gun> ItemLoader::loadGunFromJson(const json& gunJson) {
                 std::string slotName = it.key();
                 int capacity = it.value();
                 
-                // 将字符串转换为AttachmentSlot枚举
-                AttachmentSlot slot;
-                if (slotName == "STOCK") slot = AttachmentSlot::STOCK;
-                else if (slotName == "BARREL") slot = AttachmentSlot::BARREL;
-                else if (slotName == "UNDER_BARREL") slot = AttachmentSlot::UNDER_BARREL;
-                else if (slotName == "GRIP") slot = AttachmentSlot::GRIP;
-                else if (slotName == "OPTIC") slot = AttachmentSlot::OPTIC;
-                else if (slotName == "RAIL") slot = AttachmentSlot::RAIL;
-                else if (slotName == "MUZZLE") slot = AttachmentSlot::MUZZLE;
-                else if (slotName == "MAGAZINE_WELL") slot = AttachmentSlot::MAGAZINE_WELL;
-                else if (slotName == "SPECIAL") slot = AttachmentSlot::SPECIAL;
-                else {
-                    std::cerr << "未知配件槽位类型: " << slotName << std::endl;
-                    continue;
-                }
-                
-                // 设置槽位容量
-                gun->setSlotCapacity(slot, capacity);
+                // 直接使用字符串作为槽位类型
+                gun->setSlotCapacity(slotName, capacity);
             }
         }
         
@@ -868,16 +833,34 @@ std::unique_ptr<Magazine> ItemLoader::loadMagazineFromJson(const json& magazineJ
         if (magazineJson.contains("unloadTime")) magazine->setUnloadTime(magazineJson["unloadTime"]);
         if (magazineJson.contains("reloadTime")) magazine->setReloadTime(magazineJson["reloadTime"]);
         
-        // 设置兼容弹药类型
+        // 设置兼容弹药类型（支持两种字段名格式）
         std::vector<std::string> ammoTypes;
-        if (magazineJson.contains("compatibleAmmoTypes") && magazineJson["compatibleAmmoTypes"].is_array()) {
+        
+        // 尝试新格式（下划线）
+        if (magazineJson.contains("compatible_ammo_types") && magazineJson["compatible_ammo_types"].is_array()) {
+            for (const auto& typeJson : magazineJson["compatible_ammo_types"]) {
+                if (typeJson.is_string()) {
+                    ammoTypes.push_back(typeJson);
+                }
+            }
+        }
+        // 尝试旧格式（驼峰）作为后备
+        else if (magazineJson.contains("compatibleAmmoTypes") && magazineJson["compatibleAmmoTypes"].is_array()) {
             for (const auto& typeJson : magazineJson["compatibleAmmoTypes"]) {
                 if (typeJson.is_string()) {
                     ammoTypes.push_back(typeJson);
                 }
             }
         }
+        
         magazine->setCompatibleAmmoTypes(ammoTypes);
+        
+        // 添加调试信息
+        std::cout << "弹匣 " << name << " 兼容弹药类型: ";
+        for (const auto& ammoType : ammoTypes) {
+            std::cout << ammoType << " ";
+        }
+        std::cout << std::endl;
         
         // 加载标签
         if (magazineJson.contains("flags") && magazineJson["flags"].is_array()) {

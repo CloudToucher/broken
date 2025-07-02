@@ -1,9 +1,10 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 编译时确保cd进入build文件夹
+必须必须必须进入build文件夹！！！禁止任何在根目录的编译行为！
 cmake .. -G "Visual Studio 17 2022" -A x64
 
 cmake --build . --config Release

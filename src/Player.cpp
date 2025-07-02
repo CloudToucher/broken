@@ -215,16 +215,52 @@ void Player::update(float deltaTime) {
 // 新增attemptReload方法（替代原reloadCurrentWeapon方法）
 void Player::attemptReload() {
     Gun* currentGun = nullptr;
-    if (heldItem && heldItem->hasFlag(ItemFlag::WEAPON)) {
+    if (heldItem && heldItem->hasFlag(ItemFlag::GUN)) {
         currentGun = static_cast<Gun*>(heldItem.get());
     }
 
     if (currentGun) {
+        std::cout << "Player attempting to reload " << currentGun->getName() << std::endl;
+        
+        // 检查当前弹匣状态
+        if (currentGun->getCurrentMagazine()) {
+            std::cout << "Current magazine: " << currentGun->getCurrentMagazine()->getName() 
+                      << " with " << currentGun->getCurrentMagazine()->getCurrentAmmoCount() << " rounds" << std::endl;
+        } else {
+            std::cout << "No current magazine in gun" << std::endl;
+        }
+        
+        // 检查是否有兼容的备用弹匣
+        auto compatibleTypes = currentGun->getEffectiveAmmoTypes();
+        std::cout << "Gun compatible ammo types: ";
+        for (const auto& type : compatibleTypes) {
+            std::cout << type << " ";
+        }
+        std::cout << std::endl;
+        
+        // 手动查找弹匣
+        auto magazineItems = findItemsByCategory(ItemFlag::MAGAZINE);
+        std::cout << "Found " << magazineItems.size() << " magazines in storage" << std::endl;
+        
+        for (const auto& [slot, storage, index, item] : magazineItems) {
+            Magazine* mag = static_cast<Magazine*>(item);
+            std::cout << "  Magazine: " << mag->getName() 
+                      << " with " << mag->getCurrentAmmoCount() << " rounds" 
+                      << " (compatible types: ";
+            for (const auto& ammoType : mag->getCompatibleAmmoTypes()) {
+                std::cout << ammoType << " ";
+            }
+            std::cout << ")" << std::endl;
+        }
+        
         // 添加换弹状态
         addPlayerState(EntityStateEffect::Type::RELOADING, "reloading", static_cast<int>(currentGun->getReloadTime() * 1000));
         
         // 使用Entity的方法进行换弹
-        reloadWeaponAuto(currentGun);
+        float reloadTime = reloadWeaponAuto(currentGun);
+        std::cout << "Reload initiated, expected time: " << reloadTime << " seconds" << std::endl;
+    } else {
+        std::cout << "Player cannot reload - no gun held or wrong item type" << std::endl;
     }
 }
 
@@ -420,10 +456,14 @@ void Player::handleInput(const bool* keyState, float deltaTime) {
         removePlayerState(EntityStateEffect::Type::MOVING);
     }
     
-    // 检查R键（换弹）
-    if (keyState[SDL_SCANCODE_R]) {
-        attemptReload();
+    // 检查R键（换弹）- 使用静态变量防止重复触发
+    static bool prevRKeyState = false;
+    bool currentRKeyState = keyState[SDL_SCANCODE_R];
+    if (currentRKeyState && !prevRKeyState) {
+        std::cout << "R key pressed - attempting reload with action queue" << std::endl;
+        reloadCurrentWeapon(); // 使用原有的换弹方法，它会使用Action队列
     }
+    prevRKeyState = currentRKeyState;
     
     // 检查F键（交互）
     if (keyState[SDL_SCANCODE_F]) {
@@ -459,7 +499,7 @@ void Player::handleMouseMotion(int mouseX, int mouseY, float cameraX, float came
 // 实现reloadCurrentWeapon方法
 void Player::reloadCurrentWeapon(bool needChamber) {
     Gun* currentGun = nullptr;
-    if (heldItem && heldItem->hasFlag(ItemFlag::WEAPON)) {
+    if (heldItem && heldItem->hasFlag(ItemFlag::GUN)) {
         currentGun = static_cast<Gun*>(heldItem.get());
     }
     
@@ -477,18 +517,41 @@ void Player::reloadCurrentWeapon(bool needChamber) {
 
 // 实现attemptShoot方法
 void Player::attemptShoot() {
-    // 检查是否有手持物品，且是武器
-    if (!heldItem || !heldItem->hasFlag(ItemFlag::WEAPON)) {
+    // 检查是否有手持物品，且是枪械
+    if (!heldItem) {
+        std::cout << "Player cannot shoot - no item held" << std::endl;
+        return;
+    }
+    
+    if (!heldItem->hasFlag(ItemFlag::GUN)) {
+        std::cout << "Player cannot shoot - held item is not a gun: " << heldItem->getName() << std::endl;
         return;
     }
     
     // 转换为Gun类型
     Gun* gun = static_cast<Gun*>(heldItem.get());
+    std::cout << "Player attempting to shoot " << gun->getName() << std::endl;
+    
+    // 检查枪械状态
+    if (gun->getCurrentMagazine()) {
+        std::cout << "Current magazine: " << gun->getCurrentMagazine()->getName() 
+                  << " with " << gun->getCurrentMagazine()->getCurrentAmmoCount() << " rounds" << std::endl;
+    } else {
+        std::cout << "No magazine loaded" << std::endl;
+    }
+    
+    if (gun->getChamberedRound()) {
+        std::cout << "Round chambered: " << gun->getChamberedRound()->getName() << std::endl;
+    } else {
+        std::cout << "No round chambered" << std::endl;
+    }
     
     // 检查是否可以射击
     if (!canShoot(gun)) {
+        std::cout << "Gun cannot shoot - checking if reload needed" << std::endl;
         // 如果需要换弹，自动换弹
         if (needsReload(gun)) {
+            std::cout << "Reload needed" << std::endl;
             attemptReload();
         }
         return;
@@ -505,11 +568,14 @@ void Player::attemptShoot() {
         dirY /= length;
     }
     
+    std::cout << "Firing gun in direction (" << dirX << ", " << dirY << ")" << std::endl;
+    
     // 射击
     Bullet* bullet = shootInDirection(gun, dirX, dirY);
     
     // 如果射击成功，添加短暂的射击状态
     if (bullet) {
+        std::cout << "Bullet created successfully" << std::endl;
         // 如果不是连续射击状态，添加短暂的射击反馈状态
         if (!hasPlayerState("continuous_shot")) {
             addPlayerState(EntityStateEffect::Type::SHOOTING, "shot_feedback", 100); // 100毫秒的射击反馈状态
@@ -523,6 +589,8 @@ void Player::attemptShoot() {
         } else {
             gainWeaponExperience("GUN", 1); // 通用枪械经验
         }
+    } else {
+        std::cout << "Failed to create bullet" << std::endl;
     }
 }
 

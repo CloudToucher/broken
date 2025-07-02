@@ -6,52 +6,24 @@
 #include "Magazine.h" 
 #include "Ammo.h"     
 #include "GunMod.h"
+#include "SlotWhitelist.h"
+#include "FlagMapper.h"
 #include <string>
 #include <vector>
 #include <map>
 #include <memory>
 
-// ... GunType, FiringMode, AttachmentSlot 枚举保持不变 ...
-enum class GunType {
-    PISTOL,
-    REVOLVER,
-    SHOTGUN,
-    SMG,
-    RIFLE,
-    SNIPER_RIFLE,
-    DMR,
-    MACHINE_GUN,
-    GRENADE_LAUNCHER
-};
-
-enum class FiringMode {
-    SEMI_AUTO,
-    FULL_AUTO,
-    BOLT_ACTION,
-    BURST 
-};
-
-enum class AttachmentSlot {
-    STOCK,          
-    BARREL,         
-    UNDER_BARREL,   
-    GRIP,           
-    OPTIC,          
-    SIDE_MOUNT,
-    MUZZLE,         
-    MAGAZINE_WELL,  
-    RAIL,   
-    SPECIAL,        // 特殊槽位
-};
+// 移除硬编码枚举，改用基于Flag的字符串系统
+// 枪械类型、射击模式、槽位类型现在通过ItemFlag和字符串确定
 
 class Gun : public Item {
 private:
-    // ... 其他成员变量 ...
-    std::unique_ptr<Ammo> chamberedRound; // 枪膛内的一发子弹
+    // 枪膛内的一发子弹
+    std::unique_ptr<Ammo> chamberedRound; 
     
-    GunType gunType;
-    FiringMode currentFiringMode;
-    std::vector<FiringMode> availableFiringModes;
+    // 移除硬编码枚举，改用字符串系统
+    std::string currentFiringMode;                  // 当前射击模式
+    std::vector<std::string> availableFiringModes;  // 可用射击模式列表
     
     // 枪械固有的基础属性值
     float baseSoundLevel;        // 基础枪声大小
@@ -80,14 +52,17 @@ private:
     float penetrationBonus;      // 最终穿透力加成
     float reloadTime;            // 换弹时间（秒）
     
-    // 配件槽位容量映射表，记录每种槽位可容纳的配件数量
-    std::map<AttachmentSlot, int> slotCapacity;
-    // 配件槽位使用状态，记录每种槽位已使用的数量
-    std::map<AttachmentSlot, int> slotUsage;
-    // 存储所有配件
-    std::map<AttachmentSlot, std::vector<std::unique_ptr<GunMod>>> attachmentSlots;
+    // 新增：字符串化槽位系统
+    std::map<std::string, int> baseSlotCapacity;    // 基础槽位容量
+    std::map<std::string, int> currentSlotCapacity; // 当前槽位容量（考虑配件影响）
+    std::map<std::string, int> slotUsage;           // 槽位使用状态
+    std::map<std::string, std::vector<std::unique_ptr<GunMod>>> attachmentSlots; // 配件存储
+    std::map<std::string, SlotWhitelist> slotWhitelists; // 槽位白名单
     
-    std::vector<std::string> acceptedAmmoTypes; 
+    // 新增：弹药类型系统重构
+    std::vector<std::string> baseAcceptedAmmoTypes;    // 基础接受的弹药类型
+    std::vector<std::string> currentAcceptedAmmoTypes; // 当前接受的弹药类型（考虑配件影响）
+    
     std::unique_ptr<Magazine> currentMagazine; 
     
     // 可装填弹匣名称列表
@@ -97,23 +72,19 @@ public:
     // 简化构造函数
     Gun(const std::string& itemName);
 
-    // 初始化配件槽位容量
+    // 槽位管理（重构为字符串版本）
     void initAttachmentSlots();
+    void setupDefaultSlotWhitelists(); // 设置默认白名单规则
+    int getSlotCapacity(const std::string& slotType) const;
+    int getEffectiveSlotCapacity(const std::string& slotType) const; // 考虑配件影响后的容量
+    void setSlotCapacity(const std::string& slotType, int capacity);
+    int getSlotUsage(const std::string& slotType) const;
+    bool isSlotFull(const std::string& slotType) const;
     
-    // 获取槽位容量
-    int getSlotCapacity(AttachmentSlot slot) const;
-    
-    // 获取所有槽位容量映射表
-    const std::map<AttachmentSlot, int>& getSlotCapacity() const { return slotCapacity; }
-    
-    // 设置槽位容量
-    void setSlotCapacity(AttachmentSlot slot, int capacity);
-    
-    // 获取槽位已使用数量
-    int getSlotUsage(AttachmentSlot slot) const;
-    
-    // 检查槽位是否已满
-    bool isSlotFull(AttachmentSlot slot) const;
+    // 新增：白名单管理
+    void setSlotWhitelist(const std::string& slotType, const SlotWhitelist& whitelist);
+    SlotWhitelist& getSlotWhitelist(const std::string& slotType);
+    bool canAttachToSlot(const std::string& slotType, const GunMod* mod) const;
 
     // 获取可接受的弹匣名称列表
     const std::vector<std::string>& getAcceptedMagazineNames() const { return acceptedMagazineNames; }
@@ -175,83 +146,56 @@ public:
     std::unique_ptr<Magazine> unloadMagazine();
     Magazine* getCurrentMagazine() const;
     
-    // 配件相关方法
-    bool attach(AttachmentSlot slot, std::unique_ptr<GunMod> attachment); // 添加配件到指定槽位
-    std::unique_ptr<GunMod> detach(AttachmentSlot slot, int index = 0); // 从指定槽位移除配件，默认移除第一个
-    GunMod* getAttachment(AttachmentSlot slot, int index = 0) const; // 获取指定槽位的配件，默认获取第一个
-    
-    // 获取指定槽位的所有配件
-    const std::vector<GunMod*> getAllAttachments(AttachmentSlot slot) const;
-    
-    // 获取所有槽位的配件总数
+    // 配件管理（重构为字符串版本）
+    bool attach(const std::string& slotType, std::unique_ptr<GunMod> attachment);
+    std::unique_ptr<GunMod> detach(const std::string& slotType, int index = 0);
+    GunMod* getAttachment(const std::string& slotType, int index = 0) const;
+    const std::vector<GunMod*> getAllAttachments(const std::string& slotType) const;
     int getTotalAttachmentCount() const;
     
-    // 获取枪械属性
-    GunType getGunType() const { return gunType; }
+    // 弹药类型管理
+    void setBaseAcceptedAmmoTypes(const std::vector<std::string>& types);
+    const std::vector<std::string>& getBaseAcceptedAmmoTypes() const;
+    const std::vector<std::string>& getEffectiveAmmoTypes() const;
+    bool canAcceptAmmoType(const std::string& ammoType) const;
     
     void use() override;
     
-    // 获取当前射击模式
-    FiringMode getCurrentFiringMode() const { return currentFiringMode; }
+    // 射击模式管理（重构为字符串版本）
+    void setAvailableFiringModes(const std::vector<std::string>& modes);
+    const std::vector<std::string>& getAvailableFiringModes() const;
+    const std::string& getCurrentFiringMode() const;
+    void setCurrentFiringMode(const std::string& mode);
+    void toggleFiringMode();
     
-    // 切换射击模式
-    void toggleFiringMode() {
-        if (availableFiringModes.size() > 1) {
-            // 找到当前模式的索引
-            auto it = std::find(availableFiringModes.begin(), availableFiringModes.end(), currentFiringMode);
-            if (it != availableFiringModes.end()) {
-                // 计算下一个模式的索引
-                size_t currentIndex = std::distance(availableFiringModes.begin(), it);
-                size_t nextIndex = (currentIndex + 1) % availableFiringModes.size();
-                currentFiringMode = availableFiringModes[nextIndex];
-            }
-        }
-    }
+    // 类型检查（基于flag）
+    bool isGunType(const std::string& gunType) const;
+    bool hasFiringMode(const std::string& mode) const;
+    std::vector<std::string> getGunTypes() const;
     
-    // 根据枪械类型设置对应的标签
-    void setGunTypeFlags();
+    // 属性聚合（重构）
+    float getTotalWeight() const;
+    float getTotalValue() const;
     
-    // 设置枪械类型
-    void setGunType(GunType type);
-    
-    // 设置可用射击模式
-    void setAvailableFiringModes(const std::vector<FiringMode>& modes);
-    
-    // 设置接受的弹药类型
-    void setAcceptedAmmoTypes(const std::vector<std::string>& ammoTypes);
-    
-    // 设置基础声音级别
-    void setBaseSoundLevel(float level);
-    
-    // 设置基础射速
-    void setBaseFireRate(float rate);
-    
-    // 设置基础精度
-    void setBaseAccuracyMOA(float accuracy);
-    
-    // 设置基础后坐力
-    void setBaseRecoil(float recoil);
-    
-    // 设置基础人机工效学
-    void setBaseErgonomics(float ergonomics);
-    
-    // 设置基础呼吸稳定性
-    void setBaseBreathStability(float stability);
-    
-    // 设置基础伤害加成
-    void setBaseDamageBonus(float bonus);
-    
-    // 设置基础射程加成
-    void setBaseRangeBonus(float bonus);
-    
-    // 设置基础子弹速度加成
-    void setBaseBulletSpeedBonus(float bonus);
-    
-    // 设置基础穿透加成
-    void setBasePenetrationBonus(float bonus);
-    
-    // 更新枪械属性（根据配件影响值）
+    // 重新计算所有属性
+    void recalculateAllStats();
+    void recalculateSlotCapacities();
+    void recalculateAmmoTypes();
     void updateGunStats();
+    void updateFiringModeFlags(); // 更新射击模式标签
+    
+    // 设置基础属性值
+    void setBaseSoundLevel(float level);
+    void setBaseFireRate(float rate);
+    void setBaseAccuracyMOA(float accuracy);
+    void setBaseRecoil(float recoil);
+    void setBaseErgonomics(float ergonomics);
+    void setBaseBreathStability(float stability);
+    void setBaseDamageBonus(float bonus);
+    void setBaseRangeBonus(float bonus);
+    void setBaseBulletSpeedBonus(float bonus);
+    void setBasePenetrationBonus(float bonus);
+    void setReloadTime(float time);
     
     // 重写克隆方法，用于创建Gun的深拷贝
     Item* clone() const override {
@@ -263,9 +207,6 @@ public:
     
     // 拷贝赋值运算符
     Gun& operator=(const Gun& other);
-
-    // 设置换弹时间
-    void setReloadTime(float time);
 };
 
 #endif // GUN_H

@@ -1264,10 +1264,13 @@ std::vector<std::string> GameUI::getItemDetails(Item* item) const {
                 details.push_back("已安装配件:");
                 
                 // 遍历所有可能的配件槽位
-                for (int slot = static_cast<int>(AttachmentSlot::STOCK); 
-                     slot <= static_cast<int>(AttachmentSlot::SPECIAL); ++slot) {
-                    AttachmentSlot currentSlot = static_cast<AttachmentSlot>(slot);
-                    auto slotAttachments = gun->getAllAttachments(currentSlot);
+                std::vector<std::string> allSlotTypes = {
+                    "STOCK", "BARREL", "UNDER_BARREL", "GRIP", "OPTIC", 
+                    "SIDE_MOUNT", "MUZZLE", "MAGAZINE_WELL", "RAIL", "SPECIAL"
+                };
+                
+                for (const std::string& slotType : allSlotTypes) {
+                    auto slotAttachments = gun->getAllAttachments(slotType);
                     
                     if (!slotAttachments.empty()) {
                         hasAttachments = true;

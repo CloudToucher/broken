@@ -58,7 +58,7 @@ private:
     std::function<void(std::unique_ptr<Magazine>)> onMagazineUnloaded; // 卸下弹匣后的回调
 
 public:
-    UnloadMagazineAction(Entity* entity, Gun* gun, std::function<void(std::unique_ptr<Magazine>)> callback = nullptr);
+    UnloadMagazineAction(Entity* entity, Gun* gun, Storage* storage = nullptr, std::function<void(std::unique_ptr<Magazine>)> callback = nullptr);
     
     void start() override;
     void end() override;
@@ -71,7 +71,7 @@ private:
     std::unique_ptr<Magazine> magazine;
 
 public:
-    LoadMagazineAction(Entity* entity, Gun* gun, std::unique_ptr<Magazine> mag);
+    LoadMagazineAction(Entity* entity, Gun* gun, std::unique_ptr<Magazine> mag, Storage* storage = nullptr);
     
     void start() override;
     void end() override;
