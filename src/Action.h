@@ -13,6 +13,8 @@ class Entity;
 class Gun;
 class Magazine;
 class Item;
+class Storage;
+class Ammo;
 
 // 行为基类
 class Action {
@@ -183,4 +185,34 @@ public:
     void start() override;
     void end() override;
 };
+
+// 卸除一发子弹行为
+class UnloadSingleAmmoAction : public Action {
+private:
+    Magazine* magazine;            // 要卸除子弹的弹匣
+    Storage* targetStorage;        // 目标存储空间
+    std::function<void(std::unique_ptr<Ammo>)> onAmmoUnloaded; // 卸除子弹后的回调
+
+public:
+    UnloadSingleAmmoAction(Entity* entity, Magazine* mag, Storage* storage, std::function<void(std::unique_ptr<Ammo>)> callback = nullptr);
+    
+    void start() override;
+    void end() override;
+};
+
+// 装填一发子弹行为
+class LoadSingleAmmoAction : public Action {
+private:
+    Magazine* magazine;            // 要装填子弹的弹匣
+    Ammo* ammo;                    // 要装填的子弹
+    Storage* sourceStorage;        // 源存储空间
+    std::function<void(bool)> onAmmoLoaded; // 装填完成后的回调，参数表示是否成功
+
+public:
+    LoadSingleAmmoAction(Entity* entity, Magazine* mag, Ammo* ammoToLoad, Storage* storage, std::function<void(bool)> callback = nullptr);
+    
+    void start() override;
+    void end() override;
+};
+
 #endif // ACTION_H

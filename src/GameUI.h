@@ -12,6 +12,7 @@ class Game;
 class Player;
 class Item;
 class Storage;
+class Magazine;
 
 // 使用UIWindow替代原来的ItemTooltip结构
 
@@ -97,6 +98,13 @@ private:
     std::function<void(bool)> confirmationCallback;    // 确认对话框回调函数
     float originalTimeScaleBeforeConfirmation;         // 确认对话框显示前的游戏倍率
     
+    // 右键菜单相关
+    std::unique_ptr<UIWindow> rightClickMenuWindow;    // 右键菜单窗口
+    bool isRightClickMenuVisible;                      // 右键菜单是否可见
+    Item* rightClickTargetItem;                        // 右键菜单目标物品
+    Storage* rightClickTargetStorage;                  // 右键菜单目标物品所在的存储空间
+    int rightClickMenuX, rightClickMenuY;             // 右键菜单显示位置
+    
     // 标签页相关方法
     void initializeTabWindows();
     void switchToTab(TabType tab);
@@ -142,6 +150,18 @@ private:
     void updateStorageSelectionConfirmationDialog();
     void handleStorageSelectionConfirmationClick(const UIElement& element);
     
+    // 右键菜单相关方法
+    void showRightClickMenu(int mouseX, int mouseY, Item* item, Storage* storage);
+    void hideRightClickMenu();
+    void updateRightClickMenu();
+    void handleRightClickMenuClick(const UIElement& element);
+    void performItemAction(const std::string& action, Item* item, Storage* storage);
+    
+    // 子弹装填/卸载相关方法
+    void showAmmoSelectionDialog(Magazine* magazine, Storage* magazineStorage);
+    void showStorageSelectionForUnloadAmmo(Magazine* magazine);
+    void handleAmmoActionConfirmationClick(const std::string& actionData);
+    
 public:
     GameUI();
     ~GameUI();
@@ -169,6 +189,9 @@ public:
     // 处理点击事件
     bool handleClick(int mouseX, int mouseY, Player* player, float windowWidth, float windowHeight);
     
+    // 处理右键点击事件
+    bool handleRightClick(int mouseX, int mouseY, Player* player, float windowWidth, float windowHeight);
+    
     // 处理存储点击事件
     bool handleStorageClick(int mouseX, int mouseY, Player* player, Storage* monsterBackpack, float windowWidth, float windowHeight);
     
@@ -183,7 +206,7 @@ public:
     
     // 检查UI是否可见
     bool isPlayerUIOpen() const { return isUIVisible; }
-    bool isAnyUIOpen() const { return isUIVisible || isConfirmationVisible; }
+    bool isAnyUIOpen() const { return isUIVisible || isConfirmationVisible || isRightClickMenuVisible; }
     
     // 根据坐标查找对应元素所属的Storage
     Storage* findStorageByCoordinates(int x, int y);

@@ -46,7 +46,16 @@ std::string getItemTextWithTags(Item* item) {
     if (item->hasFlag(ItemFlag::WEAPON)) tags.push_back("武器");
     if (item->hasFlag(ItemFlag::ARMOR)) tags.push_back("护甲");
     if (item->hasFlag(ItemFlag::AMMO)) tags.push_back("弹药");
-    if (item->hasFlag(ItemFlag::MAGAZINE)) tags.push_back("弹匣");
+    if (item->hasFlag(ItemFlag::MAGAZINE)) {
+        // 对于弹匣，显示当前弹药数量和最大容量
+        Magazine* magazine = dynamic_cast<Magazine*>(item);
+        if (magazine) {
+            std::string magazineTag = "弹匣 " + std::to_string(magazine->getCurrentAmmoCount()) + "/" + std::to_string(magazine->getCapacity());
+            tags.push_back(magazineTag);
+        } else {
+            tags.push_back("弹匣");
+        }
+    }
     if (item->hasFlag(ItemFlag::FOOD)) tags.push_back("食物");
     if (item->hasFlag(ItemFlag::MEDICAL)) tags.push_back("医疗");
     if (item->hasFlag(ItemFlag::TOOL)) tags.push_back("工具");
@@ -77,7 +86,10 @@ GameUI::GameUI()
       dragStartX(0), dragStartY(0), equipmentAreaValid(false), handSlotRectValid(false),
       pendingHeldItemToReplace(nullptr), pendingNewItemToHold(nullptr), pendingNewItemSource(nullptr),
       confirmationWindow(nullptr), isConfirmationVisible(false), 
-      confirmationCallback(nullptr), originalTimeScaleBeforeConfirmation(1.0f) {
+      confirmationCallback(nullptr), originalTimeScaleBeforeConfirmation(1.0f),
+      rightClickMenuWindow(nullptr), isRightClickMenuVisible(false),
+      rightClickTargetItem(nullptr), rightClickTargetStorage(nullptr),
+      rightClickMenuX(0), rightClickMenuY(0) {
     // 构造函数中不再创建窗口，移到initFonts方法中
 }
 
@@ -146,6 +158,19 @@ bool GameUI::initFonts() {
     confirmationWindow->setAutoResize(true);
     confirmationWindow->setPadding(25.0f); // 内边距
     // maxContentWidth 将在显示时动态设置为屏幕宽度的1/4
+    
+    // 创建右键菜单窗口
+    rightClickMenuWindow = std::make_unique<UIWindow>(0.0f, 0.0f, 200.0f, 300.0f,
+                                                     SDL_Color{180, 180, 180, 255}, // 浅灰色边框
+                                                     200); // 半透明度
+    rightClickMenuWindow->setVisible(false);
+    rightClickMenuWindow->setElementClickCallback([this](const UIElement& element) {
+        this->handleRightClickMenuClick(element);
+    });
+    rightClickMenuWindow->setFonts(titleFont, subtitleFont, itemFont);
+    rightClickMenuWindow->setScrollEnabled(false); // 禁用滚动
+    rightClickMenuWindow->setAutoResize(true);
+    rightClickMenuWindow->setPadding(10.0f); // 内边距
     
     return true;
 }
@@ -775,6 +800,11 @@ void GameUI::render(SDL_Renderer* renderer, float windowWidth, float windowHeigh
         confirmationWindow->renderWithWrapping(renderer, windowWidth, windowHeight);
     }
     
+    // 渲染右键菜单（在最顶层）
+    if (isRightClickMenuVisible && rightClickMenuWindow) {
+        rightClickMenuWindow->renderWithWrapping(renderer, windowWidth, windowHeight);
+    }
+    
     // 如果正在拖拽物品，在鼠标位置绘制物品名称
     if (isDragging && draggedItem) {
         // 创建一个临时的文本表面
@@ -810,8 +840,8 @@ void GameUI::updateHoveredItem(int mouseX, int mouseY) {
     this->mouseX = mouseX;
     this->mouseY = mouseY;
 
-    // 如果确认对话框可见，不更新悬停物品
-    if (isConfirmationVisible) {
+    // 如果确认对话框或右键菜单可见，不更新悬停物品
+    if (isConfirmationVisible || isRightClickMenuVisible) {
         hoveredItem = nullptr;
         if (itemTooltipWindow) {
             itemTooltipWindow->setVisible(false);
@@ -1446,6 +1476,30 @@ bool GameUI::handleClick(int mouseX, int mouseY, Player* player, float windowWid
         currentPlayer = player;
     }
     
+    // 处理右键菜单点击（如果可见）
+    if (isRightClickMenuVisible && rightClickMenuWindow) {
+        // 检查点击是否在右键菜单内
+        bool clickInsideMenu = (mouseX >= rightClickMenuWindow->getX() && 
+                               mouseX <= rightClickMenuWindow->getX() + rightClickMenuWindow->getWidth() &&
+                               mouseY >= rightClickMenuWindow->getY() && 
+                               mouseY <= rightClickMenuWindow->getY() + rightClickMenuWindow->getHeight());
+        
+        if (clickInsideMenu) {
+            // 获取被点击的元素
+            int elementIndex = rightClickMenuWindow->getElementAtPosition(mouseX, mouseY);
+            if (elementIndex >= 0) {
+                const auto& elements = rightClickMenuWindow->getElements();
+                if (elementIndex < static_cast<int>(elements.size())) {
+                    // 处理右键菜单项点击
+                    handleRightClickMenuClick(elements[elementIndex]);
+                    return true;
+                }
+            }
+        }
+        // 点击在菜单外部，隐藏菜单
+        hideRightClickMenu();
+    }
+    
     // 最优先检查确认对话框（模态对话框）
     if (isConfirmationVisible && confirmationWindow) {
         if (confirmationWindow->handleClick(mouseX, mouseY, windowWidth, windowHeight)) {
@@ -1652,6 +1706,13 @@ bool GameUI::handleMouseMotion(int mouseX, int mouseY, float windowWidth, float 
     
     // 更新悬停物品
     updateHoveredItem(mouseX, mouseY);
+    
+    // 更新UIWindow中的悬停元素
+    UIWindow* currentWindow = getCurrentTabWindow();
+    if (currentWindow && currentWindow->getVisible()) {
+        int elementIndex = currentWindow->getElementAtPosition(mouseX, mouseY);
+        currentWindow->setHoveredElement(elementIndex);
+    }
     
     return isDragging; // 如果正在拖拽，返回true
 }
@@ -2138,9 +2199,30 @@ void GameUI::handleConfirmationClick(const UIElement& element) {
         return;
     }
     
-    // 普通确认框处理
+    // 检查是否为单发装填/卸载Action的确认框
     void* dataPtr = element.getDataPtr();
+    if (dataPtr) {
+        std::string* actionData = static_cast<std::string*>(dataPtr);
+        if (actionData && (actionData->find("load_single_ammo:") == 0 || actionData->find("unload_single_ammo:") == 0)) {
+            std::cout << "确认框点击 - 处理弹药Action: " << *actionData << std::endl;
+            handleAmmoActionConfirmationClick(*actionData);
+            delete actionData; // 释放分配的内存
+            hideConfirmationDialog();
+            return;
+        } else {
+            std::cout << "确认框点击 - dataPtr非空但不是弹药Action" << std::endl;
+        }
+    } else {
+        std::cout << "确认框点击 - dataPtr为空" << std::endl;
+    }
     
+    // 检查取消按钮
+    if (element.getText() == "取消" || element.getText().find("cancel_") == 0) {
+        hideConfirmationDialog();
+        return;
+    }
+    
+    // 普通确认框处理
     // 根据dataPtr判断是确认还是取消
     bool confirmed = (dataPtr != nullptr);
     
@@ -2981,4 +3063,502 @@ bool GameUI::handleScroll(int mouseX, int mouseY, float scrollDelta) {
     }
     
     return false; // 如果没有窗口处理滚动事件，返回false
+}
+
+// 右键菜单相关方法实现
+
+// 显示右键菜单
+void GameUI::showRightClickMenu(int mouseX, int mouseY, Item* item, Storage* storage) {
+    if (!rightClickMenuWindow || !item) {
+        return;
+    }
+    
+    // 隐藏其他可能显示的菜单
+    hideRightClickMenu();
+    
+    // 保存右键菜单相关信息
+    rightClickTargetItem = item;
+    rightClickTargetStorage = storage;
+    rightClickMenuX = mouseX;
+    rightClickMenuY = mouseY;
+    
+    // 更新菜单内容
+    updateRightClickMenu();
+    
+    // 设置菜单位置（确保不超出屏幕边界）
+    rightClickMenuWindow->setX(static_cast<float>(mouseX));
+    rightClickMenuWindow->setY(static_cast<float>(mouseY));
+    
+    // 显示菜单
+    rightClickMenuWindow->setVisible(true);
+    isRightClickMenuVisible = true;
+    
+    std::cout << "显示右键菜单: " << item->getName() << std::endl;
+}
+
+// 隐藏右键菜单
+void GameUI::hideRightClickMenu() {
+    if (rightClickMenuWindow) {
+        rightClickMenuWindow->setVisible(false);
+    }
+    isRightClickMenuVisible = false;
+    rightClickTargetItem = nullptr;
+    rightClickTargetStorage = nullptr;
+}
+
+// 更新右键菜单内容
+void GameUI::updateRightClickMenu() {
+    if (!rightClickMenuWindow || !rightClickTargetItem) {
+        return;
+    }
+    
+    rightClickMenuWindow->clearElements();
+    
+    // 添加标题（物品名称）
+    UIElement title(rightClickTargetItem->getName(), 10.0f, 30.0f, 
+                   {255, 255, 200, 255}, UIElementType::SUBTITLE);
+    rightClickMenuWindow->addElement(title);
+    
+    // 添加分隔线
+    UIElement separator("─────────────", 10.0f, 20.0f, 
+                       {150, 150, 150, 255}, UIElementType::TEXT);
+    rightClickMenuWindow->addElement(separator);
+    
+    // 通用操作：手持
+    UIElement holdOption("手持", 15.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT, (void*)"hold");
+    rightClickMenuWindow->addElement(holdOption);
+    
+    // 如果是可穿戴的，添加穿戴选项
+    if (rightClickTargetItem->isWearable()) {
+        UIElement wearOption("穿戴", 15.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT, (void*)"wear");
+        rightClickMenuWindow->addElement(wearOption);
+    }
+    
+    // 如果是枪械，添加改造选项（先不实现）
+    if (rightClickTargetItem->hasFlag(ItemFlag::GUN)) {
+        UIElement modifyOption("改造（暂未实现）", 15.0f, 35.0f, {150, 150, 150, 255}, UIElementType::TEXT, (void*)"modify");
+        rightClickMenuWindow->addElement(modifyOption);
+    }
+    
+    // 如果是弹匣，添加弹匣相关选项
+    if (rightClickTargetItem->hasFlag(ItemFlag::MAGAZINE)) {
+        Magazine* magazine = static_cast<Magazine*>(rightClickTargetItem);
+        
+        // 装填子弹选项（只有当弹匣不满时）
+        if (!magazine->isFull()) {
+            UIElement loadAmmoOption("装填子弹", 15.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT, (void*)"load_ammo");
+            rightClickMenuWindow->addElement(loadAmmoOption);
+        }
+        
+        // 卸除子弹选项（只有当弹匣有子弹时）
+        if (!magazine->isEmpty()) {
+            UIElement unloadAmmoOption("卸除子弹", 15.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT, (void*)"unload_ammo");
+            rightClickMenuWindow->addElement(unloadAmmoOption);
+        }
+    }
+    
+    // 自动调整窗口大小以适应内容
+    rightClickMenuWindow->autoSizeToContent();
+}
+
+// 处理右键菜单点击事件
+void GameUI::handleRightClickMenuClick(const UIElement& element) {
+    if (!rightClickTargetItem) {
+        return;
+    }
+    
+    // 获取操作类型
+    void* actionData = element.getDataPtr();
+    if (!actionData) {
+        return;
+    }
+    
+    std::string action = static_cast<const char*>(actionData);
+    
+    // 执行对应的操作
+    performItemAction(action, rightClickTargetItem, rightClickTargetStorage);
+    
+    // 隐藏菜单
+    hideRightClickMenu();
+}
+
+// 执行物品操作
+void GameUI::performItemAction(const std::string& action, Item* item, Storage* storage) {
+    if (!item || !currentPlayer) {
+        return;
+    }
+    
+    std::cout << "执行操作: " << action << " 对物品: " << item->getName() << std::endl;
+    
+    if (action == "hold") {
+        // 手持物品 - 需要检查当前手持位是否已有物品
+        if (storage) {
+            Item* currentHeldItem = currentPlayer->getHeldItem();
+            if (currentHeldItem) {
+                // 手持位已有物品，显示存储选择确认框
+                showStorageSelectionConfirmationDialog(currentHeldItem, item, storage);
+            } else {
+                // 手持位为空，直接手持
+                currentPlayer->holdItemFromStorage(item, storage);
+                updatePlayerUI();
+            }
+        }
+    }
+    else if (action == "wear") {
+        // 穿戴物品
+        if (storage && item->isWearable()) {
+            // 从存储空间取出物品并穿戴
+            currentPlayer->takeItemWithAction(item, storage, [this](std::unique_ptr<Item> takenItem) {
+                if (takenItem && this->currentPlayer) {
+                    this->currentPlayer->equipItemWithAction(std::move(takenItem));
+                    this->updatePlayerUI();
+                }
+            });
+        }
+    }
+    else if (action == "modify") {
+        // 改造枪械（暂未实现）
+        std::cout << "枪械改造功能尚未实现" << std::endl;
+    }
+    else if (action == "load_ammo") {
+        // 装填子弹到弹匣
+        if (item->hasFlag(ItemFlag::MAGAZINE)) {
+            showAmmoSelectionDialog(static_cast<Magazine*>(item), storage);
+        }
+    }
+    else if (action == "unload_ammo") {
+        // 卸除子弹从弹匣
+        if (item->hasFlag(ItemFlag::MAGAZINE)) {
+            showStorageSelectionForUnloadAmmo(static_cast<Magazine*>(item));
+        }
+    }
+}
+
+// 显示子弹选择对话框（用于装填弹匣）
+void GameUI::showAmmoSelectionDialog(Magazine* magazine, Storage* magazineStorage) {
+    if (!magazine || !currentPlayer) {
+        return;
+    }
+    
+    // 获取兼容的弹药类型
+    const auto& compatibleTypes = magazine->getCompatibleAmmoTypes();
+    
+    // 查找所有兼容的子弹
+    std::vector<std::tuple<Storage*, int, Ammo*>> compatibleAmmo;
+    
+    // 遍历所有存储空间寻找兼容子弹
+    auto storages = currentPlayer->getAllAvailableStorages();
+    for (const auto& storagePair : storages) {
+        Storage* storage = storagePair.second;
+        for (size_t i = 0; i < storage->getItemCount(); ++i) {
+            Item* item = storage->getItem(i);
+            if (item && item->hasFlag(ItemFlag::AMMO)) {
+                Ammo* ammo = static_cast<Ammo*>(item);
+                // 检查弹药类型是否兼容
+                for (const auto& compatibleType : compatibleTypes) {
+                    if (ammo->getAmmoType() == compatibleType) {
+                        compatibleAmmo.push_back(std::make_tuple(storage, static_cast<int>(i), ammo));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    if (compatibleAmmo.empty()) {
+        showConfirmationDialog("无兼容子弹", "未找到与该弹匣兼容的子弹。", "确定", "", nullptr);
+        return;
+    }
+    
+    // 创建子弹选择确认框
+    confirmationWindow->clearElements();
+    
+    // 标题
+    UIElement title("选择要装填的子弹（批量）", 20.0f, 40.0f, {255, 255, 255, 255}, UIElementType::TITLE);
+    confirmationWindow->addElement(title);
+    
+    // 弹匣信息
+    std::string magazineInfo = "弹匣: " + magazine->getName() + " (" + 
+                              std::to_string(magazine->getCurrentAmmoCount()) + "/" + 
+                              std::to_string(magazine->getCapacity()) + ")";
+    UIElement magazineInfoElement(magazineInfo, 20.0f, 35.0f, {200, 200, 255, 255}, UIElementType::TEXT);
+    confirmationWindow->addElement(magazineInfoElement);
+    
+    // 分隔线
+    UIElement separator("─────────────────────", 20.0f, 25.0f, {150, 150, 150, 255}, UIElementType::TEXT);
+    confirmationWindow->addElement(separator);
+    
+    // 添加每个兼容子弹的选项
+    for (size_t i = 0; i < compatibleAmmo.size() && i < 10; ++i) { // 最多显示10个选项
+        auto [storage, index, ammo] = compatibleAmmo[i];
+        
+        std::string ammoText = ammo->getName();
+        if (ammo->isStackable() && ammo->getStackSize() > 1) {
+            ammoText += " (x" + std::to_string(ammo->getStackSize()) + ")";
+        }
+        ammoText += " [" + storage->getName() + "]";
+        
+        // 将选择信息编码到dataPtr中
+        std::string* actionData = new std::string("load_single_ammo:" + std::to_string(reinterpret_cast<uintptr_t>(magazine)) + 
+                                                 ":" + std::to_string(reinterpret_cast<uintptr_t>(ammo)) + 
+                                                 ":" + std::to_string(reinterpret_cast<uintptr_t>(storage)));
+        
+        UIElement ammoOption(ammoText, 25.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT, actionData);
+        confirmationWindow->addElement(ammoOption);
+    }
+    
+    // 取消按钮
+    UIElement cancelButton("取消", 20.0f, 40.0f, {255, 100, 100, 255}, UIElementType::TEXT, (void*)"cancel_ammo_selection");
+    confirmationWindow->addElement(cancelButton);
+    
+    // 暂停游戏时间
+    if (Game::getInstance()) {
+        originalTimeScaleBeforeConfirmation = Game::getInstance()->getTimeScale();
+        Game::getInstance()->setTimeScale(0.0f);
+    }
+    
+    // 获取实际屏幕尺寸
+    float screenWidth = 1920.0f;
+    float screenHeight = 1080.0f;
+    if (Game::getInstance()) {
+        screenWidth = static_cast<float>(Game::getInstance()->getWindowWidth());
+        screenHeight = static_cast<float>(Game::getInstance()->getWindowHeight());
+    }
+    
+    // 显示确认框
+    confirmationWindow->autoSizeToContent();
+    confirmationWindow->centerOnScreen(screenWidth, screenHeight);
+    confirmationWindow->setVisible(true);
+    isConfirmationVisible = true;
+}
+
+// 显示存储选择对话框（用于卸除子弹）
+void GameUI::showStorageSelectionForUnloadAmmo(Magazine* magazine) {
+    if (!magazine || !currentPlayer) {
+        return;
+    }
+    
+    // 获取所有存储空间
+    auto availableStorages = currentPlayer->getAllAvailableStorages();
+    
+    if (availableStorages.empty()) {
+        showConfirmationDialog("无存储空间", "未找到可用的存储空间。", "确定", "", nullptr);
+        return;
+    }
+    
+    // 创建存储选择确认框
+    confirmationWindow->clearElements();
+    
+    // 标题
+    UIElement title("选择卸除子弹到（全部）", 20.0f, 40.0f, {255, 255, 255, 255}, UIElementType::TITLE);
+    confirmationWindow->addElement(title);
+    
+    // 弹匣信息
+    std::string magazineInfo = "弹匣: " + magazine->getName() + " (" + 
+                              std::to_string(magazine->getCurrentAmmoCount()) + "发)";
+    UIElement magazineInfoElement(magazineInfo, 20.0f, 35.0f, {200, 200, 255, 255}, UIElementType::TEXT);
+    confirmationWindow->addElement(magazineInfoElement);
+    
+    // 分隔线
+    UIElement separator("─────────────────────", 20.0f, 25.0f, {150, 150, 150, 255}, UIElementType::TEXT);
+    confirmationWindow->addElement(separator);
+    
+    // 添加每个存储空间的选项
+    for (const auto& storagePair : availableStorages) {
+        Storage* storage = storagePair.second;
+        std::string storageText = storage->getName();
+        
+        // 显示存储空间的可用容量信息
+        float availableWeight = storage->getMaxWeight() - storage->getCurrentWeight();
+        float availableVolume = storage->getMaxVolume() - storage->getCurrentVolume();
+        storageText += " (重量: " + formatFloat(availableWeight) + "/" + formatFloat(storage->getMaxWeight()) + 
+                      " 体积: " + formatFloat(availableVolume) + "/" + formatFloat(storage->getMaxVolume()) + ")";
+        
+        // 将选择信息编码到dataPtr中
+        std::string* actionData = new std::string("unload_single_ammo:" + std::to_string(reinterpret_cast<uintptr_t>(magazine)) + 
+                                                 ":" + std::to_string(reinterpret_cast<uintptr_t>(storage)));
+        
+        UIElement storageOption(storageText, 25.0f, 35.0f, {255, 255, 255, 255}, UIElementType::TEXT, actionData);
+        confirmationWindow->addElement(storageOption);
+    }
+    
+    // 取消按钮
+    UIElement cancelButton("取消", 20.0f, 40.0f, {255, 100, 100, 255}, UIElementType::TEXT, (void*)"cancel_storage_selection");
+    confirmationWindow->addElement(cancelButton);
+    
+    // 暂停游戏时间
+    if (Game::getInstance()) {
+        originalTimeScaleBeforeConfirmation = Game::getInstance()->getTimeScale();
+        Game::getInstance()->setTimeScale(0.0f);
+    }
+    
+    // 获取实际屏幕尺寸
+    float screenWidth = 1920.0f;
+    float screenHeight = 1080.0f;
+    if (Game::getInstance()) {
+        screenWidth = static_cast<float>(Game::getInstance()->getWindowWidth());
+        screenHeight = static_cast<float>(Game::getInstance()->getWindowHeight());
+    }
+    
+    // 显示确认框
+    confirmationWindow->autoSizeToContent();
+    confirmationWindow->centerOnScreen(screenWidth, screenHeight);
+    confirmationWindow->setVisible(true);
+    isConfirmationVisible = true;
+}
+
+// 处理右键点击事件
+bool GameUI::handleRightClick(int mouseX, int mouseY, Player* player, float windowWidth, float windowHeight) {
+    if (!isUIVisible || !player) {
+        return false;
+    }
+    
+    // 首先隐藏任何现有的右键菜单
+    hideRightClickMenu();
+    
+    // 更新当前玩家引用
+    currentPlayer = player;
+    
+    // 检查是否点击了物品
+    Item* clickedItem = nullptr;
+    Storage* itemStorage = nullptr;
+    
+    // 遍历所有窗口查找被点击的物品
+    UIWindow* currentWindow = getCurrentTabWindow();
+    if (currentWindow && currentWindow->getVisible()) {
+        int elementIndex = currentWindow->getElementAtPosition(mouseX, mouseY);
+        if (elementIndex >= 0) {
+            const auto& elements = currentWindow->getElements();
+            if (elementIndex < static_cast<int>(elements.size())) {
+                const UIElement& element = elements[elementIndex];
+                void* dataPtr = element.getDataPtr();
+                
+                if (dataPtr) {
+                    // 尝试将dataPtr转换为Item*
+                    clickedItem = static_cast<Item*>(dataPtr);
+                    
+                    // 查找该物品所在的存储空间
+                    itemStorage = findStorageByCoordinates(mouseX, mouseY);
+                    
+                    if (clickedItem && itemStorage) {
+                        // 显示右键菜单
+                        showRightClickMenu(mouseX, mouseY, clickedItem, itemStorage);
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    
+    return false;
+}
+
+// 处理弹药Action确认框的点击事件
+void GameUI::handleAmmoActionConfirmationClick(const std::string& actionData) {
+    std::cout << "进入handleAmmoActionConfirmationClick，actionData: " << actionData << std::endl;
+    
+    if (!currentPlayer) {
+        std::cout << "错误：currentPlayer为空" << std::endl;
+        return;
+    }
+    
+    std::cout << "currentPlayer可用，开始解析actionData" << std::endl;
+    
+    // 解析actionData字符串
+    std::string action;
+    Magazine* magazine = nullptr;
+    Ammo* ammo = nullptr;
+    Storage* storage = nullptr;
+    
+    // 分割字符串：action:magazine_ptr:ammo_ptr:storage_ptr 或 action:magazine_ptr:storage_ptr
+    size_t pos1 = actionData.find(':');
+    if (pos1 == std::string::npos) return;
+    
+    action = actionData.substr(0, pos1);
+    
+    size_t pos2 = actionData.find(':', pos1 + 1);
+    if (pos2 == std::string::npos) return;
+    
+    // 解析magazine指针
+    uintptr_t magazinePtr = std::stoull(actionData.substr(pos1 + 1, pos2 - pos1 - 1));
+    magazine = reinterpret_cast<Magazine*>(magazinePtr);
+    
+    if (action == "load_single_ammo") {
+        // 装填子弹：load_single_ammo:magazine_ptr:ammo_ptr:storage_ptr
+        size_t pos3 = actionData.find(':', pos2 + 1);
+        if (pos3 == std::string::npos) {
+            std::cout << "错误：无法找到第3个冒号" << std::endl;
+            return;
+        }
+        
+        // 解析ammo和storage指针
+        uintptr_t ammoPtr = std::stoull(actionData.substr(pos2 + 1, pos3 - pos2 - 1));
+        uintptr_t storagePtr = std::stoull(actionData.substr(pos3 + 1)); // 从pos3+1到字符串末尾
+        
+        ammo = reinterpret_cast<Ammo*>(ammoPtr);
+        storage = reinterpret_cast<Storage*>(storagePtr);
+        
+        if (magazine && ammo && storage) {
+            std::cout << "解析成功 - Magazine: " << magazine->getName() << ", Ammo: " << ammo->getName() << ", Storage: " << storage->getName() << std::endl;
+            
+            // 计算要装填的子弹数量：子弹组数量与剩余容量取最小值
+            int ammoCount = ammo->isStackable() ? ammo->getStackSize() : 1;
+            int remainingCapacity = magazine->getCapacity() - magazine->getCurrentAmmoCount();
+            int loadCount = std::min(ammoCount, remainingCapacity);
+            
+            std::cout << "计算结果 - 子弹数量: " << ammoCount << ", 剩余容量: " << remainingCapacity << ", 装填数量: " << loadCount << std::endl;
+            
+            // 批量添加LoadSingleAmmoAction到队列
+            for (int i = 0; i < loadCount; ++i) {
+                auto loadAction = std::make_unique<LoadSingleAmmoAction>(
+                    currentPlayer, magazine, ammo, storage,
+                    [this, i, loadCount](bool success) {
+                        if (success) {
+                            std::cout << "第 " << (i + 1) << " 发子弹装填成功" << std::endl;
+                        } else {
+                            std::cout << "第 " << (i + 1) << " 发子弹装填失败" << std::endl;
+                        }
+                        // 在最后一发完成时更新UI
+                        if (i == loadCount - 1) {
+                            this->updatePlayerUI();
+                        }
+                    }
+                );
+                
+                currentPlayer->getActionQueue()->addAction(std::move(loadAction));
+            }
+            
+            std::cout << "已添加 " << loadCount << " 个装填Action到队列" << std::endl;
+        }
+    }
+    else if (action == "unload_single_ammo") {
+        // 卸除子弹：unload_single_ammo:magazine_ptr:storage_ptr
+        uintptr_t storagePtr = std::stoull(actionData.substr(pos2 + 1));
+        storage = reinterpret_cast<Storage*>(storagePtr);
+        
+        if (magazine && storage) {
+            // 计算要卸除的子弹数量：弹匣内子弹数量
+            int unloadCount = magazine->getCurrentAmmoCount();
+            
+            std::cout << "准备卸除 " << unloadCount << " 发子弹从弹匣" << std::endl;
+            
+            // 批量添加UnloadSingleAmmoAction到队列
+            for (int i = 0; i < unloadCount; ++i) {
+                auto unloadAction = std::make_unique<UnloadSingleAmmoAction>(
+                    currentPlayer, magazine, storage,
+                    [this, i, unloadCount](std::unique_ptr<Ammo> unloadedAmmo) {
+                        std::cout << "第 " << (i + 1) << " 发子弹卸除成功" << std::endl;
+                        // 在最后一发完成时更新UI
+                        if (i == unloadCount - 1) {
+                            this->updatePlayerUI();
+                        }
+                    }
+                );
+                
+                currentPlayer->getActionQueue()->addAction(std::move(unloadAction));
+            }
+            
+            std::cout << "已添加 " << unloadCount << " 个卸除Action到队列" << std::endl;
+        }
+    }
 }

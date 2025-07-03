@@ -56,6 +56,9 @@ private:
     // 存储每个元素的渲染区域
     std::map<size_t, ElementRenderRect> elementRects;
     
+    // 悬停效果
+    int hoveredElementIndex;  // 当前悬停的元素索引，-1表示没有悬停
+    
     // 用于累计Y轴偏移量
     float currentYOffset;
     
@@ -98,6 +101,11 @@ public:
     bool getVisible() const;
     void setBorderColor(SDL_Color color);
     void setOpacity(Uint8 opacity);
+    
+    // 悬停效果方法
+    void setHoveredElement(int elementIndex);
+    int getHoveredElement() const;
+    void clearHoveredElement();
     
     // 位置和尺寸获取
     float getX() const { return x; }

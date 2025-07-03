@@ -12,6 +12,7 @@ UIWindow::UIWindow(float x, float y, float width, float height, SDL_Color border
     height(height),
     borderColor(borderColor),
     opacity(opacity),
+    hoveredElementIndex(-1),
     currentYOffset(0.0f),
     elementClickCallback(nullptr),
     titleFont(nullptr),
@@ -358,6 +359,9 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
         float elementMaxWidth = 0.0f;
         float elementTotalHeight = 0.0f;
         
+        // 检查是否是悬停元素，如果是则绘制背景高亮
+        bool isHovered = (hoveredElementIndex == static_cast<int>(i));
+        
         // 渲染每一行
         for (const auto& line : lines) {
             if (line.text.empty()) {
@@ -381,6 +385,27 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
                         static_cast<float>(textSurface->w),
                         static_cast<float>(textSurface->h)
                     };
+                    
+                    // 存储元素渲染区域
+                    elementRects[i] = {
+                        renderRect.x,
+                        renderRect.y,
+                        renderRect.w,
+                        renderRect.h
+                    };
+                    
+                    // 如果是悬停元素，绘制背景高亮
+                    if (isHovered && elementTotalHeight > 0) {
+                        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 20); // 半透明白色高亮
+                        SDL_FRect highlightRect = {
+                            renderRect.x - 2.0f,
+                            renderRect.y - 1.0f,
+                            renderRect.w + 4.0f,
+                            renderRect.h + 2.0f
+                        };
+                        SDL_RenderFillRect(renderer, &highlightRect);
+                    }
                     
                     // 渲染文本
                     SDL_RenderTexture(renderer, textTexture, nullptr, &renderRect);
@@ -467,11 +492,29 @@ void UIWindow::renderWithWrapping(SDL_Renderer* renderer, float windowWidth, flo
                             static_cast<float>(textSurface->h)
                         };
                         
+                        // 存储元素渲染区域
+                        elementRects[i] = {
+                            renderRect.x,
+                            renderRect.y,
+                            renderRect.w,
+                            renderRect.h
+                        };
+                        
+                        // 如果是悬停元素，绘制背景高亮
+                        if (hoveredElementIndex == static_cast<int>(i)) {
+                            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 20); // 半透明白色高亮
+                            SDL_FRect highlightRect = {
+                                renderRect.x - 2.0f,
+                                renderRect.y - 1.0f,
+                                renderRect.w + 4.0f,
+                                renderRect.h + 2.0f
+                            };
+                            SDL_RenderFillRect(renderer, &highlightRect);
+                        }
+                        
                         // 渲染文本
                         SDL_RenderTexture(renderer, textTexture, nullptr, &renderRect);
-                        
-                        // 更新Y偏移量
-                        currentYOffset += renderRect.h;
                         
                         // 释放纹理
                         SDL_DestroyTexture(textTexture);
@@ -570,6 +613,19 @@ void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHei
                     renderRect.h
                 };
                 
+                // 如果是悬停元素，绘制背景高亮
+                if (hoveredElementIndex == static_cast<int>(i)) {
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 20); // 半透明白色高亮
+                    SDL_FRect highlightRect = {
+                        renderRect.x - 2.0f,
+                        renderRect.y - 1.0f,
+                        renderRect.w + 4.0f,
+                        renderRect.h + 2.0f
+                    };
+                    SDL_RenderFillRect(renderer, &highlightRect);
+                }
+                
                 // 渲染文本
                 SDL_RenderTexture(renderer, textTexture, nullptr, &renderRect);
                 
@@ -630,6 +686,27 @@ void UIWindow::render(SDL_Renderer* renderer, float windowWidth, float windowHei
                         static_cast<float>(textSurface->w),
                         static_cast<float>(textSurface->h)
                     };
+                    
+                    // 存储元素渲染区域
+                    elementRects[i] = {
+                        renderRect.x,
+                        renderRect.y,
+                        renderRect.w,
+                        renderRect.h
+                    };
+                    
+                    // 如果是悬停元素，绘制背景高亮
+                    if (hoveredElementIndex == static_cast<int>(i)) {
+                        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 20); // 半透明白色高亮
+                        SDL_FRect highlightRect = {
+                            renderRect.x - 2.0f,
+                            renderRect.y - 1.0f,
+                            renderRect.w + 4.0f,
+                            renderRect.h + 2.0f
+                        };
+                        SDL_RenderFillRect(renderer, &highlightRect);
+                    }
                     
                     // 渲染文本
                     SDL_RenderTexture(renderer, textTexture, nullptr, &renderRect);
@@ -928,4 +1005,17 @@ bool UIWindow::handleScroll(int mouseX, int mouseY, float scrollDelta) {
     scroll(scrollAmount);
     
     return true; // 表示事件已处理
+}
+
+// 悬停效果方法实现
+void UIWindow::setHoveredElement(int elementIndex) {
+    hoveredElementIndex = elementIndex;
+}
+
+int UIWindow::getHoveredElement() const {
+    return hoveredElementIndex;
+}
+
+void UIWindow::clearHoveredElement() {
+    hoveredElementIndex = -1;
 }

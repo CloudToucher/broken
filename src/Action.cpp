@@ -497,3 +497,182 @@ void UnequipItemByItemAction::end() {
         Action::end();
     }
 }
+
+// UnloadSingleAmmoAction实现 - 卸除一发子弹
+UnloadSingleAmmoAction::UnloadSingleAmmoAction(Entity* entity, Magazine* mag, Storage* storage, std::function<void(std::unique_ptr<Ammo>)> callback)
+    : Action(entity, 
+             mag && storage ? 
+                 (mag->getUnloadTime() + storage->getStorageTime()) / 30.0f : // 除以30因为是单发操作
+                 0.0f,
+             EntityState::UNLOADING),
+      magazine(mag), targetStorage(storage), onAmmoUnloaded(callback) {
+}
+
+void UnloadSingleAmmoAction::start() {
+    if (!isStarted && owner && magazine && targetStorage && !magazine->isEmpty()) {
+        std::cout << "开始卸除一发子弹，预计时间: " << duration << " 秒" << std::endl;
+        Action::start();
+    } else {
+        // 如果弹匣为空或参数无效，直接标记为完成
+        isStarted = true;
+        isCompleted = true;
+    }
+}
+
+void UnloadSingleAmmoAction::end() {
+    if (isStarted && !isCompleted) {
+        // 从弹匣中取出一发子弹
+        if (magazine && targetStorage && !magazine->isEmpty()) {
+            std::unique_ptr<Ammo> unloadedAmmo = magazine->consumeAmmo();
+            
+            if (unloadedAmmo) {
+                // 将子弹添加到目标存储空间
+                bool success = targetStorage->addItem(std::move(unloadedAmmo));
+                
+                if (success) {
+                    std::cout << "成功卸除一发子弹到存储空间" << std::endl;
+                } else {
+                    std::cout << "存储空间已满，无法卸除子弹" << std::endl;
+                }
+                
+                // 如果有回调函数，调用它
+                if (onAmmoUnloaded && success) {
+                    // 注意：这里已经移动了unloadedAmmo，所以不能再传递它
+                    // 回调函数应该用于通知操作完成，而不是传递物品
+                }
+            }
+        }
+        
+        Action::end();
+    }
+}
+
+// LoadSingleAmmoAction实现 - 装填一发子弹
+LoadSingleAmmoAction::LoadSingleAmmoAction(Entity* entity, Magazine* mag, Ammo* ammoToLoad, Storage* storage, std::function<void(bool)> callback)
+    : Action(entity, 
+             mag && storage ? 
+                 (mag->getReloadTime() + storage->getStorageTime()) / 30.0f : // 除以30因为是单发操作
+                 0.0f,
+             EntityState::RELOADING),
+      magazine(mag), ammo(ammoToLoad), sourceStorage(storage), onAmmoLoaded(callback) {
+}
+
+void LoadSingleAmmoAction::start() {
+    std::cout << "LoadSingleAmmoAction::start() 调用" << std::endl;
+    std::cout << "检查参数 - isStarted:" << isStarted << ", owner:" << (owner ? "有效" : "空") 
+              << ", magazine:" << (magazine ? "有效" : "空") << ", ammo:" << (ammo ? "有效" : "空") 
+              << ", sourceStorage:" << (sourceStorage ? "有效" : "空") << std::endl;
+    
+    if (magazine) {
+        std::cout << "弹匣状态 - isFull:" << magazine->isFull() << ", canAcceptAmmo:" << (ammo ? magazine->canAcceptAmmo(ammo->getAmmoType()) : false) << std::endl;
+    }
+    
+    if (!isStarted && owner && magazine && ammo && sourceStorage && 
+        !magazine->isFull() && magazine->canAcceptAmmo(ammo->getAmmoType())) {
+        std::cout << "开始装填一发子弹，预计时间: " << duration << " 秒" << std::endl;
+        Action::start();
+    } else {
+        std::cout << "装填条件不满足，跳过Action" << std::endl;
+        // 如果弹匣已满、子弹不兼容或参数无效，直接标记为完成
+        isStarted = true;
+        isCompleted = true;
+        
+        // 调用回调函数，传递失败状态
+        if (onAmmoLoaded) {
+            onAmmoLoaded(false);
+        }
+    }
+}
+
+void LoadSingleAmmoAction::end() {
+    if (isStarted && !isCompleted) {
+        // 从存储空间中取出子弹并装填到弹匣中
+        bool success = false;
+        
+        if (magazine && ammo && sourceStorage && !magazine->isFull()) {
+            // 查找子弹在存储空间中的索引
+            for (size_t i = 0; i < sourceStorage->getItemCount(); ++i) {
+                if (sourceStorage->getItem(i) == ammo) {
+                    // 检查是否是可堆叠的物品
+                    if (ammo->isStackable()) {
+                        if (ammo->getStackSize() > 1) {
+                            // 减少堆叠数量
+                            ammo->setStackSize(ammo->getStackSize() - 1);
+                            
+                            // 创建一个新的单发子弹装填到弹匣中
+                            std::unique_ptr<Ammo> singleAmmo = std::make_unique<Ammo>(*ammo);
+                            singleAmmo->setStackSize(1);
+                            
+                            success = magazine->loadAmmo(std::move(singleAmmo));
+                            
+                            if (success) {
+                                std::cout << "成功装填一发子弹到弹匣（从堆叠中取出）" << std::endl;
+                            } else {
+                                // 如果装填失败，恢复堆叠数量
+                                ammo->setStackSize(ammo->getStackSize() + 1);
+                                std::cout << "装填失败，子弹类型不兼容或弹匣已满" << std::endl;
+                            }
+                        } else {
+                            // 堆叠数量为1的可堆叠物品，直接移除
+                            std::unique_ptr<Item> takenItem = sourceStorage->removeItem(static_cast<int>(i));
+                            
+                            if (takenItem) {
+                                // 转换为Ammo
+                                std::unique_ptr<Ammo> ammoPtr(static_cast<Ammo*>(takenItem.release()));
+                                
+                                // 检查是否可以装填
+                                if (!magazine->isFull() && magazine->canAcceptAmmo(ammoPtr->getAmmoType())) {
+                                    success = magazine->loadAmmo(std::move(ammoPtr));
+                                    
+                                    if (success) {
+                                        std::cout << "成功装填一发子弹到弹匣（堆叠数量为1）" << std::endl;
+                                    } else {
+                                        std::cout << "装填失败，未知错误" << std::endl;
+                                    }
+                                } else {
+                                    std::cout << "装填失败，子弹类型不兼容或弹匣已满" << std::endl;
+                                    // 将item放回存储空间
+                                    sourceStorage->addItem(std::move(ammoPtr));
+                                    success = false;
+                                }
+                            }
+                        }
+                    } else {
+                        // 非堆叠物品，直接移除整个item
+                        std::unique_ptr<Item> takenItem = sourceStorage->removeItem(static_cast<int>(i));
+                        
+                        if (takenItem) {
+                            // 转换为Ammo
+                            std::unique_ptr<Ammo> ammoPtr(static_cast<Ammo*>(takenItem.release()));
+                            
+                            // 检查是否可以装填
+                            if (!magazine->isFull() && magazine->canAcceptAmmo(ammoPtr->getAmmoType())) {
+                                success = magazine->loadAmmo(std::move(ammoPtr));
+                                
+                                if (success) {
+                                    std::cout << "成功装填一发子弹到弹匣" << std::endl;
+                                } else {
+                                    std::cout << "装填失败，未知错误" << std::endl;
+                                }
+                            } else {
+                                std::cout << "装填失败，子弹类型不兼容或弹匣已满" << std::endl;
+                                // 将item放回存储空间
+                                sourceStorage->addItem(std::move(ammoPtr));
+                                success = false;
+                            }
+                        }
+                    }
+                    
+                    break;
+                }
+            }
+        }
+        
+        // 调用回调函数，传递成功状态
+        if (onAmmoLoaded) {
+            onAmmoLoaded(success);
+        }
+        
+        Action::end();
+    }
+}

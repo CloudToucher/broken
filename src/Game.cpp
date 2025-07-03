@@ -677,19 +677,28 @@ void Game::handleEvents() {
             bool uiClicked = false;
             
             // 检查是否点击了玩家UI元素
-            if (gameUI->isAnyUIOpen() && event.button.button == SDL_BUTTON_LEFT) {
+            if (gameUI->isAnyUIOpen()) {
                 // 获取实际窗口尺寸
                 int actualWidth = 0, actualHeight = 0;
                 SDL_GetWindowSizeInPixels(window, &actualWidth, &actualHeight);
                 
-                // 处理玩家UI点击
-                if (gameUI->isPlayerUIOpen()) {
-                    uiClicked = gameUI->handleClick(event.button.x, event.button.y, player.get(), 
-                                                  static_cast<float>(actualWidth), static_cast<float>(actualHeight));
-                    
-                    // 处理Storage折叠/展开按钮点击
-                    if (!uiClicked) {
-                        uiClicked = gameUI->handleStorageClick(event.button.x, event.button.y, player.get(), nullptr, 
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    // 处理左键点击
+                    if (gameUI->isPlayerUIOpen()) {
+                        uiClicked = gameUI->handleClick(event.button.x, event.button.y, player.get(), 
+                                                      static_cast<float>(actualWidth), static_cast<float>(actualHeight));
+                        
+                        // 处理Storage折叠/展开按钮点击
+                        if (!uiClicked) {
+                            uiClicked = gameUI->handleStorageClick(event.button.x, event.button.y, player.get(), nullptr, 
+                                                               static_cast<float>(actualWidth), static_cast<float>(actualHeight));
+                        }
+                    }
+                }
+                else if (event.button.button == SDL_BUTTON_RIGHT) {
+                    // 处理右键点击
+                    if (gameUI->isPlayerUIOpen()) {
+                        uiClicked = gameUI->handleRightClick(event.button.x, event.button.y, player.get(),
                                                            static_cast<float>(actualWidth), static_cast<float>(actualHeight));
                     }
                 }
