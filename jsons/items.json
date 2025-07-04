@@ -123,6 +123,38 @@
                 "MAGAZINE_WELL": 1,
                 "SPECIAL": 1
             }
+        },
+        {
+            "name": "MDX",
+            "weight": 2.8,
+            "volume": 0.6,
+            "length": 0.85,
+            "value": 1800,
+            "fireRate": 750.0,
+            "accuracy": 2.0,
+            "recoil": 18.0,
+            "ergonomics": 55.0,
+            "breathStability": 0.8,
+            "soundLevel": 160.0,
+            "damageBonus": 0.0,
+            "rangeBonus": 0.0,
+            "bulletSpeedBonus": 0.0,
+            "penetrationBonus": 0.0,
+            "firingModes": ["SEMI_AUTO", "FULL_AUTO"],
+            "ammoTypes": [],
+            "acceptedMagazines": [],
+            "flags": ["GUN", "WEAPON", "RIFLE", "SEMI_AUTO", "FULL_AUTO"],
+            "slotCapacity": {
+                "STOCK": 1,
+                "BARREL": 1,
+                "UNDER_BARREL": 1,
+                "GRIP": 1,
+                "OPTIC": 1,
+                "RAIL": 2,
+                "MUZZLE": 0,
+                "MAGAZINE_WELL": 1,
+                "SPECIAL": 1
+            }
         }
     ],
     "ammo": [
@@ -423,6 +455,32 @@
             "slot_capacity_modifiers": {},
             "added_ammo_types": ["7.62x39mm"],
             "removed_ammo_types": ["5.56x45mm"]
+        },
+        {
+            "name": "MDX_556_Barrel",
+            "weight": 0.8,
+            "volume": 0.25,
+            "length": 0.4,
+            "value": 600,
+            "modSoundLevel": -5.0,
+            "modFireRate": 0.0,
+            "modAccuracyMOA": -0.5,
+            "modRecoil": -3.0,
+            "modErgonomics": -2.0,
+            "modBreathStability": 0.05,
+            "modDamageBonus": 3.0,
+            "modRangeBonus": 50.0,
+            "modBulletSpeedBonus": 25.0,
+            "modPenetrationBonus": 5.0,
+            "flags": ["GUNMOD", "MOD_BARREL", "CHANGES_CALIBER", "CALIBER_5_56"],
+            "compatible_slots": ["BARREL"],
+            "slot_capacity_modifiers": {
+                "MUZZLE": 1
+            },
+            "added_ammo_types": ["5.56x45mm"],
+            "removed_ammo_types": [],
+            "added_magazine_names": ["StandardRifleMag"],
+            "removed_magazine_names": []
         },
         {
             "name": "SureFireX400U",

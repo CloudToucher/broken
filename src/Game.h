@@ -247,6 +247,9 @@ public:
     
     // 测试堆叠系统
     void testStackingSystem();
+    
+    // 测试物品切换功能（把HK416放到背包，创建MDX和枪管）
+    void testItemSwitch();
 };
 
 #endif // GAME_H

@@ -275,26 +275,85 @@ void Player::handleMouseRelease(int button) {
     }
 }
 
-void Player::equipItem(std::unique_ptr<Item> item) {
+// =======================================================================
+// 新的手持物品系统实现 - 明确语义，避免与装备系统混淆
+// =======================================================================
+
+void Player::holdItem(std::unique_ptr<Item> item) {
     if (!item) {
+        std::cout << "警告：尝试手持空物品" << std::endl;
         return;
     }
 
-    // 如果是可穿戴物品，使用Action系统进行装备
-    if (item->isWearable()) {
-        // 如果是可穿戴物品（如背包、护甲等），使用Action系统进行装备
-        // 这样可以确保有正确的装备动画和时间
-        std::string itemName = item->getName(); // 保存物品名称用于日志
-        equipItemWithAction(std::move(item));
-        std::cout << "Player started equipping wearable item: " << itemName << std::endl;
+    // 如果已经有手持物品，先放下
+    if (heldItem) {
+        std::cout << "放下手持物品: " << heldItem->getName() << std::endl;
+    }
+
+    // 设置新的手持物品
+    heldItem = std::move(item);
+    std::cout << "玩家手持: " << heldItem->getName() << " (注意：这是手持，不是装备到身体部位)" << std::endl;
+}
+
+void Player::releaseHeldItem() {
+    if (heldItem) {
+        std::cout << "玩家放下手持物品: " << heldItem->getName() << std::endl;
+        heldItem.reset();
     } else {
-        // 对于其他所有物品（武器、工具、弹药等），都设置为手持物品（右手）
-        heldItem = std::move(item);
-        if (heldItem) {
-            std::cout << "Player equipped in right hand: " << heldItem->getName() << std::endl;
-        }
+        std::cout << "玩家当前没有手持任何物品" << std::endl;
     }
 }
+
+// =======================================================================
+// 新的装备系统实现 - 专门用于穿戴装备（护甲、手套等）
+// =======================================================================
+
+void Player::wearEquipment(std::unique_ptr<Item> equipment, EquipSlot slot) {
+    if (!equipment) {
+        std::cout << "警告：尝试穿戴空装备" << std::endl;
+        return;
+    }
+
+    if (!equipment->isWearable()) {
+        std::cout << "错误：" << equipment->getName() << " 不是可穿戴装备" << std::endl;
+        return;
+    }
+
+    std::string equipmentName = equipment->getName();
+    std::cout << "开始穿戴装备: " << equipmentName << " 到部位: " << static_cast<int>(slot) << std::endl;
+    
+    // 使用Action系统进行装备，确保有正确的装备动画和时间
+    equipItemWithAction(std::move(equipment));
+}
+
+void Player::unwearEquipment(EquipSlot slot, std::function<void(std::unique_ptr<Item>)> callback) {
+    std::cout << "开始卸下装备，部位: " << static_cast<int>(slot) << std::endl;
+    
+    // 检查是否是手持物品槽位
+    if (slot == EquipSlot::RIGHT_HAND && heldItem) {
+        // 如果是手持物品，直接处理而不使用行为队列
+        std::unique_ptr<Item> item = std::move(heldItem);
+        std::cout << "Player removed held item: " << item->getName() << std::endl;
+        
+        // 如果有回调，调用回调函数
+        if (callback) {
+            callback(std::move(item));
+        }
+        return;
+    }
+    
+    // 对于其他装备槽位，使用Entity的unequipItemWithAction方法
+    unequipItemWithAction(slot, callback);
+}
+
+Item* Player::getEquippedItem(EquipSlot slot) const {
+    if (equipmentSystem) {
+        return equipmentSystem->getEquippedItem(slot);
+    }
+    return nullptr;
+}
+
+// equipItem方法已移至Player.h中的内联实现（废弃方法）
 
 Item* Player::getHeldItem() const {
     return heldItem.get();
@@ -334,7 +393,7 @@ bool Player::holdItemFromStorage(Item* item, Storage* storage) {
     auto holdAction = std::make_unique<HoldItemAction>(this, item, storage, 
         [this](std::unique_ptr<Item> item) {
             // 回调函数：将物品设置为手持物品
-            this->equipItem(std::move(item));
+            this->holdItem(std::move(item));
         });
     
     // 将行为添加到行为队列
@@ -641,24 +700,8 @@ bool Player::transferItem(Item* item, Storage* sourceStorage, Storage* targetSto
     return true; // 如果执行到这里，说明参数检查都通过了，返回true表示操作已添加到队列
 }
 
-// 卸下装备方法实现
-void Player::unequipItem(EquipSlot slot, std::function<void(std::unique_ptr<Item>)> callback) {
-    // 检查是否是手持物品槽位
-    if (slot == EquipSlot::RIGHT_HAND && heldItem) {
-        // 如果是手持物品，直接处理而不使用行为队列
-        std::unique_ptr<Item> item = std::move(heldItem);
-        std::cout << "Player unequipped from right hand: " << item->getName() << std::endl;
-        
-        // 如果有回调，调用回调函数
-        if (callback) {
-            callback(std::move(item));
-        }
-        return;
-    }
-    
-    // 对于其他装备槽位，使用Entity的unequipItemWithAction方法
-    unequipItemWithAction(slot, callback);
-}
+// unequipItem方法已移至Player.h中的内联实现（废弃方法）
+// 注意：原有的手持物品逻辑已迁移到unwearEquipment方法
 
 void Player::setPosition(float newX, float newY) {
     x = newX;

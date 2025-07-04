@@ -16,6 +16,36 @@
 class PlayerController; // 新增：前向声明PlayerController
 
 class Player : public Creature {  // 改为继承Creature
+    /*
+    ======================================================================= 
+    重要提醒：修改Player类成员变量时的必要维护清单
+    ======================================================================= 
+    当您添加/修改/删除任何成员变量时，请确保同时更新以下位置：
+    
+    必须更新的位置：
+    1. 【构造函数】Player.cpp中的Player::Player() - 在初始化列表和函数体中初始化
+    2. 【析构函数】Player.cpp中的~Player() - 如果需要特殊清理
+    3. 【拷贝构造函数】如果实现了拷贝构造（目前可能没有）
+    4. 【移动构造函数】如果实现了移动构造（目前可能没有）
+    5. 【render方法】Player.cpp中的render() - 如果影响渲染
+    6. 【update方法】Player.cpp中的update() - 如果需要每帧更新
+    
+    可能需要更新的位置：
+    7. 【getter/setter】为新成员添加访问方法
+    8. 【状态管理】PlayerStateManager相关逻辑
+    9. 【网络同步】setPosition、网络相关方法
+    10. 【伤害系统】takeDamage、身体部位相关方法
+    11. 【装备系统】EquipmentSystem相关逻辑
+    12. 【技能系统】SkillSystem相关逻辑
+    13. 【序列化】如果有保存/加载功能
+    14. 【UI显示】GameUI中的玩家信息显示
+    
+    特别注意：
+    - 身体部位血量变量组：如果添加新的身体部位，需要更新所有身体部位相关方法
+    - 智能指针成员：确保在构造函数中正确初始化（make_unique）
+    - 原始指针成员：确保在析构函数中适当处理，避免悬空指针
+    ======================================================================= 
+    */
 private:
     // 新增：角色四大基础属性
     int STR;                       // 力量 - 影响近战伤害和负重
@@ -105,15 +135,45 @@ public:
     // 重写更新方法
     void update(float deltaTime = 1.0f / 60.0f) override;
     
-    // 手持物品相关方法
-    void equipItem(std::unique_ptr<Item> item);
-    Item* getHeldItem() const;
-    void useHeldItem();
+    // =======================================================================
+    // 手持物品系统（武器等）- 与装备系统完全分离
+    // 注意：手持物品只能有一个，存储在heldItem中
+    // 维护提醒：如果修改heldItem相关成员，需要同步更新：
+    // - 构造函数初始化列表
+    // - 拷贝构造函数（如果存在）
+    // - 析构函数清理逻辑  
+    // - render()方法中的手持物品渲染
+    // - 相关getter/setter方法
+    // =======================================================================
+    void holdItem(std::unique_ptr<Item> item);           // 手持物品（替代equipItem）
+    void releaseHeldItem();                              // 放下手持物品
+    Item* getHeldItem() const;                           // 获取当前手持物品
+    void useHeldItem();                                  // 使用手持物品
     bool holdItemFromStorage(Item* item, Storage* storage); // 从存储空间中取出物品并手持
     
-    // 卸下装备方法
-    void unequipItem(EquipSlot slot, std::function<void(std::unique_ptr<Item>)> callback = nullptr);
-
+    // =======================================================================
+    // 装备系统（护甲、手套、头盔等穿戴装备）- 与手持系统完全分离
+    // 注意：装备系统基于EquipSlot枚举，每个部位可以穿戴不同装备
+    // 维护提醒：如果添加新的装备槽位或装备相关成员，需要同步更新：
+    // - EquipSlot枚举定义
+    // - EquipmentSystem类的槽位处理逻辑
+    // - 装备渲染逻辑
+    // - 装备属性加成计算
+    // - 序列化/反序列化逻辑
+    // =======================================================================
+    void wearEquipment(std::unique_ptr<Item> equipment, EquipSlot slot);  // 穿戴装备到指定部位
+    void unwearEquipment(EquipSlot slot, std::function<void(std::unique_ptr<Item>)> callback = nullptr); // 卸下装备
+    Item* getEquippedItem(EquipSlot slot) const;         // 获取指定部位的装备
+    
+    // 向后兼容的废弃方法（避免破坏现有代码）
+    [[deprecated("使用holdItem()替代，该方法容易混淆手持和装备概念")]]
+    void equipItem(std::unique_ptr<Item> item) { holdItem(std::move(item)); }
+    
+    [[deprecated("使用unwearEquipment()替代，保持命名一致性")]]  
+    void unequipItem(EquipSlot slot, std::function<void(std::unique_ptr<Item>)> callback = nullptr) {
+        unwearEquipment(slot, std::move(callback));
+    }
+    
     // 重写渲染方法以渲染手持物品
     void render(SDL_Renderer* renderer, float cameraX, float cameraY) override;
     

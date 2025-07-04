@@ -17,6 +17,29 @@
 // 枪械类型、射击模式、槽位类型现在通过ItemFlag和字符串确定
 
 class Gun : public Item {
+    /*
+    ======================================================================= 
+    重要提醒：修改Gun类成员变量时的必要维护清单
+    ======================================================================= 
+    当您添加/修改/删除任何成员变量时，请确保同时更新以下位置：
+    
+    必须更新的位置：
+    1. 【构造函数】Gun.cpp中的Gun::Gun() - 初始化新成员
+    2. 【clone方法】Gun.h末尾的clone()内联实现 - 复制所有成员
+    3. 【重计算方法】recalculateAllStats() - 如果是影响属性的成员
+    4. 【JSON加载】ItemLoader.cpp中的createGun() - 如果需要从JSON读取
+    5. 【序列化】如果有保存/加载功能，需要更新序列化逻辑
+    
+    可能需要更新的位置：
+    6. 【调试输出】任何debug或toString方法
+    7. 【比较操作】如果实现了==或!=运算符
+    8. 【getter/setter】为新成员添加访问方法
+    9. 【渲染/UI】如果成员影响显示效果
+    10. 【网络同步】如果是多人游戏相关成员
+    
+    提示：使用IDE的"查找所有引用"功能确保没有遗漏
+    ======================================================================= 
+    */
 private:
     // 枪膛内的一发子弹
     std::unique_ptr<Ammo> chamberedRound; 
@@ -63,9 +86,13 @@ private:
     std::vector<std::string> baseAcceptedAmmoTypes;    // 基础接受的弹药类型
     std::vector<std::string> currentAcceptedAmmoTypes; // 当前接受的弹药类型（考虑配件影响）
     
+    // 新增：弹匣兼容性系统重构
+    std::vector<std::string> baseAcceptedMagazineNames;    // 基础接受的弹匣名称
+    std::vector<std::string> currentAcceptedMagazineNames; // 当前接受的弹匣名称（考虑配件影响）
+    
     std::unique_ptr<Magazine> currentMagazine; 
     
-    // 可装填弹匣名称列表
+    // 弃用：可装填弹匣名称列表（为了向后兼容保留）
     std::vector<std::string> acceptedMagazineNames;
 
 public:
@@ -86,13 +113,20 @@ public:
     SlotWhitelist& getSlotWhitelist(const std::string& slotType);
     bool canAttachToSlot(const std::string& slotType, const GunMod* mod) const;
 
-    // 获取可接受的弹匣名称列表
+    // 弹匣兼容性管理（新系统）
+    void setBaseAcceptedMagazineNames(const std::vector<std::string>& names);
+    const std::vector<std::string>& getBaseAcceptedMagazineNames() const;
+    const std::vector<std::string>& getEffectiveMagazineNames() const;
+    bool canAcceptMagazine(const std::string& magazineName) const;
+    void recalculateMagazineNames();
+    
+    // 获取可接受的弹匣名称列表（为了向后兼容保留）
     const std::vector<std::string>& getAcceptedMagazineNames() const { return acceptedMagazineNames; }
     
-    // 设置可接受的弹匣名称列表
+    // 设置可接受的弹匣名称列表（为了向后兼容保留）
     void setAcceptedMagazineNames(const std::vector<std::string>& magazineNames) { acceptedMagazineNames = magazineNames; }
     
-    // 添加可接受的弹匣名称
+    // 添加可接受的弹匣名称（为了向后兼容保留）
     void addAcceptedMagazineName(const std::string& magazineName) { acceptedMagazineNames.push_back(magazineName); }
     
     // 射击方法 - 返回发射的子弹，同时尝试自动上膛

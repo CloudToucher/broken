@@ -52,6 +52,8 @@ GunMod::GunMod(const GunMod& other)
       slotCapacityModifiers(other.slotCapacityModifiers),
       addedAmmoTypes(other.addedAmmoTypes),
       removedAmmoTypes(other.removedAmmoTypes),
+      addedMagazineNames(other.addedMagazineNames),
+      removedMagazineNames(other.removedMagazineNames),
       compatibleSlots(other.compatibleSlots) {
 }
 
@@ -78,6 +80,8 @@ GunMod& GunMod::operator=(const GunMod& other) {
         slotCapacityModifiers = other.slotCapacityModifiers;
         addedAmmoTypes = other.addedAmmoTypes;
         removedAmmoTypes = other.removedAmmoTypes;
+        addedMagazineNames = other.addedMagazineNames;
+        removedMagazineNames = other.removedMagazineNames;
         compatibleSlots = other.compatibleSlots;
     }
     return *this;
@@ -153,6 +157,61 @@ const std::vector<std::string>& GunMod::getRemovedAmmoTypes() const {
 void GunMod::clearAmmoTypeChanges() {
     addedAmmoTypes.clear();
     removedAmmoTypes.clear();
+}
+
+// 新增：弹匣兼容性修改方法实现
+void GunMod::addMagazineSupport(const std::string& magazineName) {
+    auto it = std::find(addedMagazineNames.begin(), addedMagazineNames.end(), magazineName);
+    if (it == addedMagazineNames.end()) {
+        addedMagazineNames.push_back(magazineName);
+    }
+    
+    // 如果这个弹匣在移除列表中，从移除列表中删除
+    auto removeIt = std::find(removedMagazineNames.begin(), removedMagazineNames.end(), magazineName);
+    if (removeIt != removedMagazineNames.end()) {
+        removedMagazineNames.erase(removeIt);
+    }
+}
+
+void GunMod::removeMagazineSupport(const std::string& magazineName) {
+    // 从添加列表中移除
+    auto addIt = std::find(addedMagazineNames.begin(), addedMagazineNames.end(), magazineName);
+    if (addIt != addedMagazineNames.end()) {
+        addedMagazineNames.erase(addIt);
+    }
+}
+
+void GunMod::addMagazineRestriction(const std::string& magazineName) {
+    auto it = std::find(removedMagazineNames.begin(), removedMagazineNames.end(), magazineName);
+    if (it == removedMagazineNames.end()) {
+        removedMagazineNames.push_back(magazineName);
+    }
+    
+    // 如果这个弹匣在添加列表中，从添加列表中删除
+    auto addIt = std::find(addedMagazineNames.begin(), addedMagazineNames.end(), magazineName);
+    if (addIt != addedMagazineNames.end()) {
+        addedMagazineNames.erase(addIt);
+    }
+}
+
+void GunMod::removeMagazineRestriction(const std::string& magazineName) {
+    auto removeIt = std::find(removedMagazineNames.begin(), removedMagazineNames.end(), magazineName);
+    if (removeIt != removedMagazineNames.end()) {
+        removedMagazineNames.erase(removeIt);
+    }
+}
+
+const std::vector<std::string>& GunMod::getAddedMagazineNames() const {
+    return addedMagazineNames;
+}
+
+const std::vector<std::string>& GunMod::getRemovedMagazineNames() const {
+    return removedMagazineNames;
+}
+
+void GunMod::clearMagazineChanges() {
+    addedMagazineNames.clear();
+    removedMagazineNames.clear();
 }
 
 // 新增：槽位兼容性方法实现

@@ -5,6 +5,29 @@
 #include "Item.h"
 
 class GunMod : public Item {
+    /*
+    ======================================================================= 
+    重要提醒：修改GunMod类成员变量时的必要维护清单
+    ======================================================================= 
+    当您添加/修改/删除任何成员变量时，请确保同时更新以下位置：
+    
+    必须更新的位置：
+    1. 【构造函数】GunMod.cpp中的GunMod::GunMod() - 初始化新成员
+    2. 【拷贝构造函数】GunMod(const GunMod& other) - 复制所有成员
+    3. 【拷贝赋值运算符】operator=(const GunMod& other) - 复制所有成员
+    4. 【JSON加载】ItemLoader.cpp中的createGunMod() - 如果需要从JSON读取
+    5. 【应用到枪械】Gun.cpp中的recalculateAllStats() - 如果影响枪械属性
+    
+    可能需要更新的位置：
+    6. 【getter/setter】为新成员添加访问方法（如上述模式）
+    7. 【清除方法】如果需要clear或reset功能
+    8. 【兼容性检查】如果影响配件兼容性逻辑
+    9. 【调试输出】任何debug或日志输出
+    10. 【序列化】如果有保存/加载功能
+    
+    提示：特别注意拷贝构造函数和赋值运算符，这是最容易遗漏的地方！
+    ======================================================================= 
+    */
 protected:
     // 枪械配件属性（对枪械的影响值）
     float modSoundLevel = 0.0f;            // 声音级别影响（分贝）
@@ -26,6 +49,10 @@ protected:
     // 新增：弹药类型影响
     std::vector<std::string> addedAmmoTypes;           // 新增支持的弹药类型
     std::vector<std::string> removedAmmoTypes;         // 移除支持的弹药类型
+    
+    // 新增：弹匣兼容性影响
+    std::vector<std::string> addedMagazineNames;       // 新增支持的弹匣名称
+    std::vector<std::string> removedMagazineNames;     // 移除支持的弹匣名称
     
     // 新增：兼容的槽位类型（通过flag确定）
     std::vector<std::string> compatibleSlots;         // 可以安装到的槽位类型
@@ -83,6 +110,15 @@ public:
     const std::vector<std::string>& getAddedAmmoTypes() const;
     const std::vector<std::string>& getRemovedAmmoTypes() const;
     void clearAmmoTypeChanges();
+    
+    // 新增：弹匣兼容性修改
+    void addMagazineSupport(const std::string& magazineName);
+    void removeMagazineSupport(const std::string& magazineName);
+    void addMagazineRestriction(const std::string& magazineName);
+    void removeMagazineRestriction(const std::string& magazineName);
+    const std::vector<std::string>& getAddedMagazineNames() const;
+    const std::vector<std::string>& getRemovedMagazineNames() const;
+    void clearMagazineChanges();
     
     // 新增：槽位兼容性
     void addCompatibleSlot(const std::string& slotType);

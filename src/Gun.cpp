@@ -581,6 +581,7 @@ void Gun::use() {
 void Gun::recalculateAllStats() {
     recalculateSlotCapacities();
     recalculateAmmoTypes();
+    recalculateMagazineNames();
     updateGunStats();
 }
 
@@ -633,6 +634,58 @@ void Gun::recalculateAmmoTypes() {
             }
         }
     }
+}
+
+// 新增：弹匣兼容性管理方法实现
+void Gun::setBaseAcceptedMagazineNames(const std::vector<std::string>& names) {
+    baseAcceptedMagazineNames = names;
+    recalculateMagazineNames(); // 重新计算当前有效弹匣类型
+}
+
+const std::vector<std::string>& Gun::getBaseAcceptedMagazineNames() const {
+    return baseAcceptedMagazineNames;
+}
+
+const std::vector<std::string>& Gun::getEffectiveMagazineNames() const {
+    return currentAcceptedMagazineNames;
+}
+
+bool Gun::canAcceptMagazine(const std::string& magazineName) const {
+    return std::find(currentAcceptedMagazineNames.begin(), currentAcceptedMagazineNames.end(), magazineName) 
+           != currentAcceptedMagazineNames.end();
+}
+
+void Gun::recalculateMagazineNames() {
+    // 从基础弹匣类型开始
+    currentAcceptedMagazineNames = baseAcceptedMagazineNames;
+    
+    // 应用所有配件的弹匣类型影响
+    for (const auto& [slotType, attachmentVector] : attachmentSlots) {
+        for (const auto& attachment : attachmentVector) {
+            if (attachment) {
+                // 添加配件支持的弹匣类型
+                const auto& addedMagazines = attachment->getAddedMagazineNames();
+                for (const std::string& magazineName : addedMagazines) {
+                    if (std::find(currentAcceptedMagazineNames.begin(), currentAcceptedMagazineNames.end(), magazineName) 
+                        == currentAcceptedMagazineNames.end()) {
+                        currentAcceptedMagazineNames.push_back(magazineName);
+                    }
+                }
+                
+                // 移除配件禁止的弹匣类型
+                const auto& removedMagazines = attachment->getRemovedMagazineNames();
+                for (const std::string& magazineName : removedMagazines) {
+                    auto it = std::find(currentAcceptedMagazineNames.begin(), currentAcceptedMagazineNames.end(), magazineName);
+                    if (it != currentAcceptedMagazineNames.end()) {
+                        currentAcceptedMagazineNames.erase(it);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 为了向后兼容，同步更新旧的acceptedMagazineNames字段
+    acceptedMagazineNames = currentAcceptedMagazineNames;
 }
 
 // 新增：属性聚合方法实现

@@ -358,6 +358,40 @@ std::unique_ptr<GunMod> ItemLoader::createGunMod(const std::string& modName) {
         templateMod->getModPenetrationBonus()
     );
     
+    // 复制槽位容量修改器
+    const auto& slotModifiers = templateMod->getSlotCapacityModifiers();
+    for (const auto& [slotType, modifier] : slotModifiers) {
+        newMod->addSlotCapacityModifier(slotType, modifier);
+    }
+    
+    // 复制弹药类型影响
+    const auto& addedAmmo = templateMod->getAddedAmmoTypes();
+    for (const auto& ammoType : addedAmmo) {
+        newMod->addAmmoTypeSupport(ammoType);
+    }
+    const auto& removedAmmo = templateMod->getRemovedAmmoTypes();
+    for (const auto& ammoType : removedAmmo) {
+        newMod->addAmmoTypeRestriction(ammoType);
+    }
+    
+    // 复制弹匣兼容性影响
+    const auto& addedMags = templateMod->getAddedMagazineNames();
+    for (const auto& magName : addedMags) {
+        newMod->addMagazineSupport(magName);
+    }
+    const auto& removedMags = templateMod->getRemovedMagazineNames();
+    for (const auto& magName : removedMags) {
+        newMod->addMagazineRestriction(magName);
+    }
+    
+    // 复制兼容槽位（这是关键！）
+    const auto& compatibleSlots = templateMod->getCompatibleSlots();
+    for (const auto& slotType : compatibleSlots) {
+        newMod->addCompatibleSlot(slotType);
+    }
+    
+    std::cout << "创建配件 " << modName << " 完成，兼容槽位数量: " << newMod->getCompatibleSlots().size() << std::endl;
+    
     return newMod;
 }
 
@@ -797,6 +831,83 @@ std::unique_ptr<GunMod> ItemLoader::loadGunModFromJson(const json& modJson) {
             else if (slotType == "SPECIAL") mod->addFlag(ItemFlag::MOD_FLASHLIGHT);
             else {
                 std::cerr << "未知配件槽位类型: " << slotType << std::endl;
+            }
+        }
+        
+        // 加载槽位容量修改器
+        if (modJson.contains("slot_capacity_modifiers") && modJson["slot_capacity_modifiers"].is_object()) {
+            for (auto it = modJson["slot_capacity_modifiers"].begin(); it != modJson["slot_capacity_modifiers"].end(); ++it) {
+                std::string slotType = it.key();
+                int modifier = it.value();
+                mod->addSlotCapacityModifier(slotType, modifier);
+            }
+        }
+        
+        // 加载新增弹药类型
+        if (modJson.contains("added_ammo_types") && modJson["added_ammo_types"].is_array()) {
+            for (const auto& ammoTypeJson : modJson["added_ammo_types"]) {
+                if (ammoTypeJson.is_string()) {
+                    mod->addAmmoTypeSupport(ammoTypeJson);
+                }
+            }
+        }
+        
+        // 加载移除弹药类型
+        if (modJson.contains("removed_ammo_types") && modJson["removed_ammo_types"].is_array()) {
+            for (const auto& ammoTypeJson : modJson["removed_ammo_types"]) {
+                if (ammoTypeJson.is_string()) {
+                    mod->addAmmoTypeRestriction(ammoTypeJson);
+                }
+            }
+        }
+        
+        // 加载新增弹匣类型
+        if (modJson.contains("added_magazine_names") && modJson["added_magazine_names"].is_array()) {
+            for (const auto& magazineNameJson : modJson["added_magazine_names"]) {
+                if (magazineNameJson.is_string()) {
+                    mod->addMagazineSupport(magazineNameJson);
+                }
+            }
+        }
+        
+        // 加载移除弹匣类型
+        if (modJson.contains("removed_magazine_names") && modJson["removed_magazine_names"].is_array()) {
+            for (const auto& magazineNameJson : modJson["removed_magazine_names"]) {
+                if (magazineNameJson.is_string()) {
+                    mod->addMagazineRestriction(magazineNameJson);
+                }
+            }
+        }
+        
+        // 加载兼容槽位
+        std::cout << "检查 " << name << " 的 compatible_slots 字段..." << std::endl;
+        if (modJson.contains("compatible_slots") && modJson["compatible_slots"].is_array()) {
+            std::cout << "找到 compatible_slots 字段，开始加载..." << std::endl;
+            for (const auto& slotJson : modJson["compatible_slots"]) {
+                if (slotJson.is_string()) {
+                    std::string slotName = slotJson;
+                    std::cout << "  添加兼容槽位: " << slotName << std::endl;
+                    mod->addCompatibleSlot(slotName);
+                }
+            }
+        } else {
+            std::cout << "未找到 compatible_slots 字段或字段不是数组" << std::endl;
+        }
+        
+        // 检查加载结果
+        std::cout << "加载后兼容槽位数量: " << mod->getCompatibleSlots().size() << std::endl;
+        for (const auto& slot : mod->getCompatibleSlots()) {
+            std::cout << "  兼容槽位: " << slot << std::endl;
+        }
+        
+        // 如果没有通过compatible_slots设置，则从标签自动确定
+        if (mod->getCompatibleSlots().empty()) {
+            std::cout << "兼容槽位为空，从标签自动确定..." << std::endl;
+            mod->updateCompatibleSlotsFromFlags();
+            
+            std::cout << "从标签确定后兼容槽位数量: " << mod->getCompatibleSlots().size() << std::endl;
+            for (const auto& slot : mod->getCompatibleSlots()) {
+                std::cout << "  从标签确定的兼容槽位: " << slot << std::endl;
             }
         }
         

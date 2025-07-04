@@ -501,8 +501,8 @@ bool Game::init() {
                     }
 
                     // 4. 将HK416交给玩家手持
-                    player->equipItem(std::move(hk416));
-                    std::cout << "✓ 玩家装备HK416完成" << std::endl;
+                    player->holdItem(std::move(hk416));
+                    std::cout << "✓ 玩家手持HK416完成" << std::endl;
                 } else {
                     std::cout << "✗ 创建HK416失败" << std::endl;
                 }
@@ -566,6 +566,10 @@ bool Game::init() {
                 }
 
                 std::cout << "=== HK416测试装备创建完成 ===\n" << std::endl;
+            
+            // 自动运行物品切换测试（便于调试）
+            std::cout << "\n--- 自动运行物品切换测试 ---" << std::endl;
+            testItemSwitch();
             }
 
 
@@ -603,9 +607,9 @@ bool Game::init() {
                     // 设置武器的稀有度
                     weapon->setRarity(ItemRarity::COMMON);
 
-                    // 将武器装备到玩家手上
-                    player->equipItem(std::move(weapon));
-                    std::cout << "Player equipped with 军用砍刀." << std::endl;
+                    // 将武器手持
+                    player->holdItem(std::move(weapon));
+                    std::cout << "Player holds 军用砍刀." << std::endl;
                 }
             }
             */
@@ -825,6 +829,10 @@ void Game::handleEvents() {
                         }
                     }
                 }
+                break;
+            case SDLK_F11: // F11键测试物品切换功能
+                std::cout << "F11键被按下，开始测试物品切换功能..." << std::endl;
+                testItemSwitch();
                 break;
             case SDLK_TAB: // Tab键切换背包界面
                 togglePlayerUI();
@@ -2563,4 +2571,138 @@ void Game::testStackingSystem() {
     }
     
     std::cout << "\n=== 堆叠系统测试完成 ===" << std::endl;
+}
+
+// 测试物品切换功能：把HK416放到背包，创建MDX和枪管并手持
+void Game::testItemSwitch() {
+    if (!player) {
+        std::cout << "错误：没有找到玩家对象" << std::endl;
+        return;
+    }
+    
+    std::cout << "\n=== 开始测试物品切换功能 ===" << std::endl;
+    
+    // 1. 检查当前手持物品
+    Item* currentHeldItem = player->getHeldItem();
+    if (currentHeldItem) {
+        std::cout << "当前手持物品: " << currentHeldItem->getName() << std::endl;
+        
+        // 2. 找到背包存储空间
+        auto storages = player->getAllAvailableStorages();
+        Storage* backpackStorage = nullptr;
+        
+        for (const auto& [slot, storage] : storages) {
+            if (storage && storage->getName().find("背包") != std::string::npos) {
+                backpackStorage = storage;
+                break;
+            }
+        }
+        
+        if (backpackStorage && backpackStorage->canFitItem(currentHeldItem)) {
+            // 3. 卸下当前手持物品到背包
+            player->unequipItem(EquipSlot::RIGHT_HAND, [this, backpackStorage](std::unique_ptr<Item> unequippedItem) {
+                if (unequippedItem) {
+                    std::cout << "成功卸下手持物品: " << unequippedItem->getName() << std::endl;
+                    if (backpackStorage->addItem(std::move(unequippedItem))) {
+                        std::cout << "成功将物品放入背包" << std::endl;
+                    } else {
+                        std::cout << "无法将物品放入背包" << std::endl;
+                    }
+                }
+            });
+        } else {
+            std::cout << "找不到合适的背包存储空间或背包已满" << std::endl;
+        }
+    } else {
+        std::cout << "当前没有手持物品" << std::endl;
+    }
+    
+    // 4. 创建MDX枪械
+    auto mdxGun = ItemLoader::getInstance()->createGun("MDX");
+    if (mdxGun) {
+        mdxGun->setRarity(ItemRarity::LEGENDARY); // 设置为传说品质
+        std::cout << "✓ 成功创建MDX枪械" << std::endl;
+        
+        // 详细检查MDX的槽位配置
+        std::cout << "MDX槽位配置检查:" << std::endl;
+        std::cout << "  BARREL槽位容量: " << mdxGun->getEffectiveSlotCapacity("BARREL") << std::endl;
+        std::cout << "  BARREL槽位使用: " << mdxGun->getSlotUsage("BARREL") << std::endl;
+        std::cout << "  BARREL槽位是否已满: " << (mdxGun->isSlotFull("BARREL") ? "是" : "否") << std::endl;
+        
+        // 5. 创建MDX_556_Barrel枪管配件
+        auto mdxBarrel = ItemLoader::getInstance()->createGunMod("MDX_556_Barrel");
+        if (mdxBarrel) {
+            mdxBarrel->setRarity(ItemRarity::EPIC); // 设置为史诗品质
+            std::cout << "✓ 成功创建MDX_556_Barrel枪管" << std::endl;
+            
+            // 详细检查枪管配件的属性
+            std::cout << "枪管配件检查:" << std::endl;
+            std::cout << "  兼容槽位: ";
+            for (const auto& slot : mdxBarrel->getCompatibleSlots()) {
+                std::cout << slot << " ";
+            }
+            std::cout << std::endl;
+            
+            std::cout << "  标签: ";
+            // 检查重要标签
+            if (mdxBarrel->hasFlag(ItemFlag::GUNMOD)) std::cout << "GUNMOD ";
+            if (mdxBarrel->hasFlag(ItemFlag::MOD_BARREL)) std::cout << "MOD_BARREL ";
+            if (mdxBarrel->hasFlag(ItemFlag::CHANGES_CALIBER)) std::cout << "CHANGES_CALIBER ";
+            if (mdxBarrel->hasFlag(ItemFlag::CALIBER_5_56)) std::cout << "CALIBER_5_56 ";
+            std::cout << std::endl;
+            
+            // 检查是否可以安装到BARREL槽位
+            std::cout << "兼容性检查:" << std::endl;
+            std::cout << "  配件声明兼容BARREL槽位: " << (mdxBarrel->canAttachToSlot("BARREL") ? "是" : "否") << std::endl;
+            std::cout << "  枪械允许安装到BARREL槽位: " << (mdxGun->canAttachToSlot("BARREL", mdxBarrel.get()) ? "是" : "否") << std::endl;
+            
+            // 检查白名单
+            auto& whitelist = mdxGun->getSlotWhitelist("BARREL");
+            std::cout << "  白名单检查: " << (whitelist.isAllowed(mdxBarrel.get()) ? "通过" : "失败") << std::endl;
+            
+            // 6. 安装枪管到MDX
+            if (mdxGun->attach("BARREL", std::move(mdxBarrel))) {
+                std::cout << "✓ 成功安装枪管到MDX" << std::endl;
+                
+                // 7. 重新计算枪械属性
+                mdxGun->recalculateAllStats();
+                std::cout << "✓ 重新计算枪械属性完成" << std::endl;
+                
+                // 输出枪械状态信息
+                std::cout << "枪械口径支持: ";
+                for (const auto& ammoType : mdxGun->getEffectiveAmmoTypes()) {
+                    std::cout << ammoType << " ";
+                }
+                std::cout << std::endl;
+                
+                std::cout << "弹匣兼容性: ";
+                for (const auto& magName : mdxGun->getEffectiveMagazineNames()) {
+                    std::cout << magName << " ";
+                }
+                std::cout << std::endl;
+                
+                // 检查MUZZLE槽位是否已添加
+                std::cout << "MUZZLE槽位容量: " << mdxGun->getEffectiveSlotCapacity("MUZZLE") << std::endl;
+                
+                // 8. 手持MDX枪械（使用新的明确命名方法）
+                player->holdItem(std::move(mdxGun));
+                std::cout << "✓ 成功手持MDX枪械" << std::endl;
+                
+            } else {
+                std::cout << "✗ 安装枪管失败 - 详细诊断完成，请检查上述输出" << std::endl;
+                // 如果安装失败，仍然手持枪械
+                player->holdItem(std::move(mdxGun));
+                std::cout << "手持未安装枪管的MDX枪械" << std::endl;
+            }
+        } else {
+            std::cout << "✗ 创建MDX_556_Barrel枪管失败" << std::endl;
+            // 仍然手持枪械
+            player->holdItem(std::move(mdxGun));
+            std::cout << "手持未安装枪管的MDX枪械" << std::endl;
+        }
+    } else {
+        std::cout << "✗ 创建MDX枪械失败" << std::endl;
+    }
+    
+    std::cout << "=== 物品切换功能测试完成 ===" << std::endl;
 }

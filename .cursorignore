@@ -1,0 +1,5 @@
+libs/SDL3/lib/
+libs/SDL3/include/
+libs/SDL3_ttf/lib/
+libs/SDL3_ttf/include/
+include/
