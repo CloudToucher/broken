@@ -7,6 +7,7 @@
 #include <memory>
 #include <iostream>
 #include "UIWindow.h"
+#include "DragDropSystem.h"
 
 class Game;
 class Player;
@@ -73,8 +74,11 @@ private:
     // 拖拽相关变量
     bool isDragging;               // 是否正在拖拽
     Item* draggedItem;             // 当前拖拽的物品
-    Storage* sourceStorage;        // 拖拽物品的源存储空间
+    Storage* sourceStorage;        // 拖拽物品的源存储空间（保留用于向后兼容）
     int dragStartX, dragStartY;    // 拖拽开始位置
+    
+    // 新的统一拖放系统变量
+    DragOperationInfo currentDragOperation;  // 当前拖放操作信息
     
     // 存储空间坐标映射
     std::vector<StorageCoordinates> storageCoordinatesMap; // 存储空间坐标范围映射
@@ -161,6 +165,13 @@ private:
     void showAmmoSelectionDialog(Magazine* magazine, Storage* magazineStorage);
     void showStorageSelectionForUnloadAmmo(Magazine* magazine);
     void handleAmmoActionConfirmationClick(const std::string& actionData);
+    
+    // 新的统一拖放系统方法
+    DragSourceInfo identifyDragSource(int mouseX, int mouseY, Item* item, Player* player);
+    DragTargetInfo identifyDragTarget(int mouseX, int mouseY, Player* player);
+    void startDragOperation(const DragSourceInfo& sourceInfo, Item* item, Player* player);
+    void completeDragOperation(const DragTargetInfo& targetInfo);
+    void cancelDragOperation();
     
 public:
     GameUI();

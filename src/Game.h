@@ -20,6 +20,8 @@
 #include "Zombie.h" // 添加Zombie头文件
 #include "Pathfinding.h" // 添加寻路系统头文件
 #include "DamageNumber.h" // 添加伤害数字头文件
+#include "EventManager.h" // 添加事件管理器头文件
+#include "Fragment.h" // 添加弹片系统头文件
 
 // 前向声明
 class Player;
@@ -250,6 +252,9 @@ public:
     
     // 测试物品切换功能（把HK416放到背包，创建MDX和枪管）
     void testItemSwitch();
+    
+    // 爆炸系统
+    void triggerExplosionAtMouse();
 };
 
 #endif // GAME_H

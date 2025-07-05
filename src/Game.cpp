@@ -834,6 +834,11 @@ void Game::handleEvents() {
                 std::cout << "F11键被按下，开始测试物品切换功能..." << std::endl;
                 testItemSwitch();
                 break;
+            case SDLK_G: // G键触发爆炸
+                if (player) {
+                    triggerExplosionAtMouse();
+                }
+                break;
             case SDLK_TAB: // Tab键切换背包界面
                 togglePlayerUI();
                 break;
@@ -894,6 +899,14 @@ void Game::update() {
     
     // 计算调整后的deltaTime
     float adjustedDeltaTime = getAdjustedDeltaTime();
+    
+    // 处理事件队列
+    EventManager& eventManager = EventManager::getInstance();
+    eventManager.processEvents();
+    
+    // 更新弹片系统
+    FragmentManager& fragmentManager = FragmentManager::getInstance();
+    fragmentManager.update(adjustedDeltaTime);
     
     // 处理所有子弹的更新和碰撞检测
     processBullets();
@@ -1042,6 +1055,10 @@ void Game::render() {
     
     // 渲染所有子弹
     renderBullets();
+    
+    // 渲染所有弹片
+    FragmentManager& fragmentManager = FragmentManager::getInstance();
+    fragmentManager.render(renderer, cameraX, cameraY);
 
     // 渲染角色
     player->render(renderer, cameraX, cameraY);
@@ -2705,4 +2722,45 @@ void Game::testItemSwitch() {
     }
     
     std::cout << "=== 物品切换功能测试完成 ===" << std::endl;
+}
+
+// 在鼠标位置触发爆炸
+void Game::triggerExplosionAtMouse() {
+    if (!player) {
+        printf("错误：没有找到玩家对象\n");
+        return;
+    }
+    
+    // 获取鼠标位置
+    float mouseX, mouseY;
+    SDL_GetMouseState(&mouseX, &mouseY);
+    
+    // 将鼠标坐标转换为世界坐标
+    float worldMouseX = mouseX / zoomLevel + cameraX;
+    float worldMouseY = mouseY / zoomLevel + cameraY;
+    
+    printf("在鼠标位置触发爆炸: (%.1f, %.1f)\n", worldMouseX, worldMouseY);
+    
+    // 创建爆炸事件
+    // 参数：位置、半径、高温伤害、钝击伤害、弹片数量、弹片伤害、弹片射程
+    std::vector<std::pair<DamageType, int>> explosionDamages;
+    explosionDamages.push_back({DamageType::HEAT, 20});  // 20点高温伤害
+    explosionDamages.push_back({DamageType::BLUNT, 20}); // 20点钝击伤害
+    
+    auto explosionEvent = std::make_shared<ExplosionEvent>(
+        worldMouseX, worldMouseY,    // 位置：鼠标世界坐标
+        5.0f,                        // 半径：5格（像素转换在事件内部处理）
+        explosionDamages,            // 爆炸伤害类型
+        50,                          // 弹片数量
+        20,                          // 弹片伤害（刺击伤害）
+        7.0f,                        // 弹片射程：7格（像素转换在事件内部处理）
+        "手动爆炸",                 // 爆炸类型
+        player.get()                 // 爆炸源（玩家）
+    );
+    
+    // 触发事件
+    EventManager& eventManager = EventManager::getInstance();
+    eventManager.queueEvent(explosionEvent);
+    
+    printf("爆炸事件已加入队列\n");
 }

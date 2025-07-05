@@ -1553,14 +1553,20 @@ bool GameUI::handleClick(int mouseX, int mouseY, Player* player, float windowWid
                         }
                         
                         // 删除已装备物品左键点击就卸下的逻辑，改为只支持拖拽操作
-                        // 开始拖拽
-                        isDragging = true;
-                        draggedItem = clickedItem;
-                        dragStartX = mouseX;
-                        dragStartY = mouseY;
-                        
-                        // 查找源存储空间
-                        sourceStorage = findStorageByCoordinates(mouseX, mouseY);
+                        // 使用新的统一拖放系统开始拖拽
+                        DragSourceInfo sourceInfo = identifyDragSource(mouseX, mouseY, clickedItem, player);
+                        if (sourceInfo.type != DragSourceType::UNKNOWN) {
+                            startDragOperation(sourceInfo, clickedItem, player);
+                            dragStartX = mouseX;
+                            dragStartY = mouseY;
+                        } else {
+                            // 如果无法识别拖放源，回退到原有逻辑
+                            isDragging = true;
+                            draggedItem = clickedItem;
+                            dragStartX = mouseX;
+                            dragStartY = mouseY;
+                            sourceStorage = findStorageByCoordinates(mouseX, mouseY);
+                        }
                         
                         // 更新存储空间坐标映射
                         updateStorageCoordinatesMap();
@@ -1841,9 +1847,7 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     // 如果任何模态对话框可见，阻止拖拽操作
     if (isConfirmationVisible) {
         // 如果有拖拽状态，取消拖拽
-        isDragging = false;
-        draggedItem = nullptr;
-        sourceStorage = nullptr;
+        cancelDragOperation();
         return true; // 事件被处理
     }
     
@@ -1851,15 +1855,28 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
     if (!isDragging || !draggedItem || !player) {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "拖拽状态无效: isDragging=%d, draggedItem=%p, player=%p",
             isDragging ? 1 : 0, draggedItem, player);
-        isDragging = false;
-        draggedItem = nullptr;
-        sourceStorage = nullptr;
+        cancelDragOperation();
         return false;
     }
 
     // 更新当前玩家引用
     if (player) {
         currentPlayer = player;
+    }
+    
+    // 优先使用新的统一拖放系统
+    if (currentDragOperation.item && currentDragOperation.player) {
+        DragTargetInfo targetInfo = identifyDragTarget(mouseX, mouseY, player);
+        if (targetInfo.type != DragTargetType::UNKNOWN) {
+            // 使用新的拖放系统处理
+            completeDragOperation(targetInfo);
+            return true;
+        } else {
+            // 如果无法识别目标，取消拖放操作
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "无法识别拖放目标，取消拖放操作");
+            cancelDragOperation();
+            return true;
+        }
     }
 
     // 查找鼠标释放位置对应的存储空间
@@ -2096,9 +2113,7 @@ bool GameUI::handleMouseRelease(int mouseX, int mouseY, Player* player, float wi
         isDragging ? 1 : 0,
         targetStorage ? targetStorage->getName().c_str() : "未知");
 
-    isDragging = false;
-    draggedItem = nullptr;
-    sourceStorage = nullptr;
+    cancelDragOperation();
 
     return true;
 }
@@ -3561,4 +3576,162 @@ void GameUI::handleAmmoActionConfirmationClick(const std::string& actionData) {
             std::cout << "已添加 " << unloadCount << " 个卸除Action到队列" << std::endl;
         }
     }
+}
+
+// 新的统一拖放系统方法实现
+
+DragSourceInfo GameUI::identifyDragSource(int mouseX, int mouseY, Item* item, Player* player) {
+    if (!item || !player) {
+        return DragSourceInfo();
+    }
+    
+    // 检查是否是手持物品
+    if (player->getHeldItem() == item) {
+        return DragSourceInfo::fromHeldItem();
+    }
+    
+    // 检查是否是装备物品
+    EquipmentSystem* equipSystem = player->getEquipmentSystem();
+    if (equipSystem) {
+        auto equippedSlots = equipSystem->getEquippedSlots();
+        for (auto slot : equippedSlots) {
+            auto equippedItems = equipSystem->getEquippedItems(slot);
+            for (auto* equippedItem : equippedItems) {
+                if (equippedItem == item) {
+                    return DragSourceInfo::fromEquipmentSlot(static_cast<int>(slot));
+                }
+            }
+        }
+    }
+    
+    // 检查是否是存储空间中的物品
+    Storage* foundStorage = findStorageByCoordinates(mouseX, mouseY);
+    if (foundStorage) {
+        // 验证物品确实在这个存储空间中
+        for (size_t i = 0; i < foundStorage->getItemCount(); ++i) {
+            if (foundStorage->getItem(i) == item) {
+                return DragSourceInfo::fromStorage(foundStorage);
+            }
+        }
+    }
+    
+    // 如果没有找到明确的源，尝试在所有存储空间中查找
+    auto storages = player->getAllAvailableStorages();
+    for (const auto& [slot, storage] : storages) {
+        if (!storage) continue;
+        for (size_t i = 0; i < storage->getItemCount(); ++i) {
+            if (storage->getItem(i) == item) {
+                return DragSourceInfo::fromStorage(storage);
+            }
+        }
+    }
+    
+    return DragSourceInfo(); // 未知源
+}
+
+DragTargetInfo GameUI::identifyDragTarget(int mouseX, int mouseY, Player* player) {
+    if (!player) {
+        return DragTargetInfo();
+    }
+    
+    // 检查是否拖拽到手持位置
+    updateHandSlotRect();
+    if (handSlotRectValid && currentTab == TabType::EQUIPMENT) {
+        UIWindow* currentWindow = getCurrentTabWindow();
+        if (currentWindow) {
+            float windowX = currentWindow->getX();
+            float windowWidth = currentWindow->getWidth();
+            float detectStartX = windowX + 10.0f;
+            float detectEndX = windowX + windowWidth - 10.0f;
+            
+            if (mouseX >= detectStartX && mouseX <= detectEndX &&
+                mouseY >= handSlotRect.y && mouseY <= handSlotRect.y + handSlotRect.height) {
+                return DragTargetInfo::fromHeldItemSlot();
+            }
+        }
+    }
+    
+    // 检查是否拖拽到装备区域
+    updateEquipmentAreaCoordinatesMap();
+    if (equipmentAreaValid && currentTab == TabType::EQUIPMENT) {
+        if (mouseX >= equipmentAreaCoordinates.topLeftX + 10.0f && 
+            mouseX <= equipmentAreaCoordinates.bottomRightX - 10.0f &&
+            mouseY >= equipmentAreaCoordinates.topLeftY && 
+            mouseY <= equipmentAreaCoordinates.bottomRightY) {
+            return DragTargetInfo::fromEquipmentArea();
+        }
+    }
+    
+    // 检查是否拖拽到存储空间
+    Storage* targetStorage = findStorageByCoordinates(mouseX, mouseY);
+    if (targetStorage) {
+        return DragTargetInfo::fromStorage(targetStorage);
+    }
+    
+    return DragTargetInfo(); // 未知目标
+}
+
+void GameUI::startDragOperation(const DragSourceInfo& sourceInfo, Item* item, Player* player) {
+    if (!item || !player) {
+        return;
+    }
+    
+    // 设置传统拖放状态（向后兼容）
+    isDragging = true;
+    draggedItem = item;
+    if (sourceInfo.type == DragSourceType::STORAGE) {
+        sourceStorage = sourceInfo.storage;
+    } else {
+        sourceStorage = nullptr;
+    }
+    
+    // 设置新的拖放操作信息
+    currentDragOperation = DragOperationInfo();
+    currentDragOperation.item = item;
+    currentDragOperation.source = sourceInfo;
+    currentDragOperation.player = player;
+    
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "开始拖放操作: %s", 
+                DragDropSystem::getOperationDescription(currentDragOperation).c_str());
+}
+
+void GameUI::completeDragOperation(const DragTargetInfo& targetInfo) {
+    if (!isDragging || !currentDragOperation.item) {
+        return;
+    }
+    
+    // 设置目标信息
+    currentDragOperation.target = targetInfo;
+    
+    // 设置完成回调
+    currentDragOperation.callback = [this](DragResult result) {
+        if (result == DragResult::SUCCESS) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "拖放操作成功完成");
+            // 更新UI
+            if (currentDragOperation.player) {
+                updatePlayerUI(currentDragOperation.player);
+            }
+        } else {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "拖放操作失败: %s", 
+                        DragDropSystem::getErrorDescription(result).c_str());
+        }
+        
+        // 清理拖放状态
+        cancelDragOperation();
+    };
+    
+    // 执行拖放操作
+    DragDropSystem::performDragOperation(currentDragOperation);
+}
+
+void GameUI::cancelDragOperation() {
+    // 清理传统拖放状态
+    isDragging = false;
+    draggedItem = nullptr;
+    sourceStorage = nullptr;
+    
+    // 清理新的拖放操作信息
+    currentDragOperation = DragOperationInfo();
+    
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "拖放操作已取消");
 }
