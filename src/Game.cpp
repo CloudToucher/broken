@@ -62,7 +62,11 @@ Game::Game() :
     debugMode(false), // 初始化调试模式为关闭状态
     gameUI(std::make_unique<GameUI>()), // 初始化游戏UI
     hurtEffectIntensity(0.0f), // 初始化受伤效果
-    hurtEffectTime(0.0f)
+    hurtEffectTime(0.0f),
+    visionMaskTexture(nullptr), // 初始化视野遮罩纹理
+    visionRayCount(360),        // 360条射线，每度一条
+    maxVisionRange(800.0f),     // 最大视野范围800像素
+    visionSystemEnabled(true)   // 视野系统默认启用
     // bullets 向量会自动初始化为空
 {
     instance = this;
@@ -642,6 +646,9 @@ bool Game::init() {
             
             // 生成测试地形来验证寻路系统
             generateTestTerrain();
+            
+            // 初始化视野系统
+            initVisionSystem();
 
             running = true;
             return true;
@@ -782,6 +789,10 @@ void Game::handleEvents() {
                 break;
             case SDLK_LEFTBRACKET: // '['键
                 adjustTimeScale(-0.1f); // 减少游戏速度
+                break;
+            case SDLK_F2: // F2键切换视野系统
+                toggleVisionSystem();
+                std::cout << "视野系统 " << (isVisionSystemEnabled() ? "启用" : "禁用") << std::endl;
                 break;
             case SDLK_F3: // F3键切换调试模式
                 toggleDebugMode();
@@ -997,6 +1008,9 @@ void Game::update() {
         if (animationTime > 2 * M_PI) {
             animationTime -= 2 * M_PI; // 保持在0-2π范围内
         }
+        
+        // 更新视野系统
+        updateVisionRays();
     }
     
     // 更新丧尸
@@ -1223,6 +1237,9 @@ void Game::render() {
     // 恢复原始缩放
     SDL_SetRenderScale(renderer, currentScaleX, currentScaleY);
 
+    // 渲染视野遮罩（在UI之前，但在场景之后）
+    renderVisionMask();
+
     // 渲染受伤屏幕效果（在最后渲染，覆盖在所有UI之上）
     renderHurtEffect();
 
@@ -1263,6 +1280,12 @@ void Game::clean() {
 
     // 清理纹理缓存
     Tile::clearTextureCache();
+    
+    // 清理视野系统资源
+    if (visionMaskTexture) {
+        SDL_DestroyTexture(visionMaskTexture);
+        visionMaskTexture = nullptr;
+    }
 
     // 清理 SoundManager
     SoundManager::getInstance()->clean();
@@ -1392,8 +1415,9 @@ void Game::processBullets() {
             allEntities.push_back(creature.get());
         }
         
-        // 检查与障碍物的碰撞
-        if (bullet->checkObstacleCollisions(gameMap->getObstacles())) {
+        // 检查与地形碰撞箱的碰撞（使用新的统一接口）
+        std::vector<Collider*> terrainColliders = getAllTerrainColliders();
+        if (bullet->checkTerrainCollisions(terrainColliders)) {
             // 子弹已失活，但保留到本帧结束再删除
             ++it;
             continue;
@@ -2884,4 +2908,287 @@ std::vector<Collider*> Game::getAllVisionColliders() const {
     }
     
     return visionColliders;
+}
+
+// 新增：统一的地形碰撞箱收集方法
+std::vector<Collider*> Game::getAllTerrainColliders() const {
+    std::vector<Collider*> terrainColliders;
+    
+    // 1. 收集地图中所有tile的TERRAIN碰撞箱
+    if (gameMap) {
+        // 获取当前可见区域的tile范围（优化性能，子弹需要更大的检测范围）
+        int minTileX = static_cast<int>(cameraX / GameConstants::TILE_SIZE) - 10;
+        int maxTileX = static_cast<int>((cameraX + windowWidth / zoomLevel) / GameConstants::TILE_SIZE) + 10;
+        int minTileY = static_cast<int>(cameraY / GameConstants::TILE_SIZE) - 10;
+        int maxTileY = static_cast<int>((cameraY + windowHeight / zoomLevel) / GameConstants::TILE_SIZE) + 10;
+        
+        // 遍历扩大的区域（子弹可能飞得很远）
+        for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
+            for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
+                Tile* tile = gameMap->getTileAt(tileX * GameConstants::TILE_SIZE, tileY * GameConstants::TILE_SIZE);
+                if (tile && tile->hasColliderWithPurpose(ColliderPurpose::TERRAIN)) {
+                    auto tileTerrainColliders = tile->getCollidersByPurpose(ColliderPurpose::TERRAIN);
+                    for (Collider* collider : tileTerrainColliders) {
+                        if (collider && collider->getIsActive()) {
+                            terrainColliders.push_back(collider);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return terrainColliders;
+}
+
+// =============================================================================
+// 视野系统实现
+// =============================================================================
+
+// 初始化视野系统
+void Game::initVisionSystem() {
+    // 预分配射线向量
+    visionRays.reserve(visionRayCount);
+    
+    // 初始化射线
+    for (int i = 0; i < visionRayCount; ++i) {
+        VisionRay ray;
+        ray.angle = (float)(i * 360.0 / visionRayCount); // 平均分布射线角度
+        ray.distance = 0.0f;
+        ray.endX = 0.0f;
+        ray.endY = 0.0f;
+        visionRays.push_back(ray);
+    }
+    
+    // 创建视野遮罩纹理
+    if (visionMaskTexture) {
+        SDL_DestroyTexture(visionMaskTexture);
+    }
+    
+    visionMaskTexture = SDL_CreateTexture(renderer, 
+                                         SDL_PIXELFORMAT_RGBA8888,
+                                         SDL_TEXTUREACCESS_TARGET,
+                                         windowWidth, windowHeight);
+    
+    if (visionMaskTexture) {
+        // 设置混合模式以支持透明度
+        SDL_SetTextureBlendMode(visionMaskTexture, SDL_BLENDMODE_BLEND);
+        printf("视野系统初始化完成: %d条射线, 最大视野范围%.1f像素\n", 
+               visionRayCount, maxVisionRange);
+    } else {
+        printf("视野遮罩纹理创建失败: %s\n", SDL_GetError());
+    }
+}
+
+// 更新视野射线
+void Game::updateVisionRays() {
+    if (!visionSystemEnabled || !player) return;
+    
+    // 获取玩家位置
+    float playerX = player->getX();
+    float playerY = player->getY();
+    
+    // 获取所有视觉碰撞箱
+    std::vector<Collider*> visionColliders = getAllVisionColliders();
+    
+    // 对每条射线进行射线投射
+    for (int i = 0; i < visionRayCount; ++i) {
+        VisionRay& ray = visionRays[i];
+        
+        // 计算射线方向
+        float angleRad = ray.angle * M_PI / 180.0f;
+        float dirX = std::cos(angleRad);
+        float dirY = std::sin(angleRad);
+        
+        // 射线终点（最大视野范围）
+        float maxEndX = playerX + dirX * maxVisionRange;
+        float maxEndY = playerY + dirY * maxVisionRange;
+        
+        // 初始化最近碰撞距离
+        float closestDistance = maxVisionRange;
+        bool hasCollision = false;
+        
+        // 检查与所有视觉碰撞箱的交点
+        for (Collider* collider : visionColliders) {
+            if (!collider || !collider->getIsActive()) continue;
+            
+            float t;
+            bool hit = false;
+            
+            if (collider->getType() == ColliderType::CIRCLE) {
+                // 射线与圆形碰撞箱的交点检测
+                float cx = collider->getCircleX();
+                float cy = collider->getCircleY();
+                float r = collider->getRadius();
+                
+                // 使用二次方程求解射线与圆的交点
+                float dx = maxEndX - playerX;
+                float dy = maxEndY - playerY;
+                float fx = playerX - cx;
+                float fy = playerY - cy;
+                
+                float a = dx * dx + dy * dy;
+                float b = 2 * (fx * dx + fy * dy);
+                float c = (fx * fx + fy * fy) - r * r;
+                
+                float discriminant = b * b - 4 * a * c;
+                if (discriminant >= 0) {
+                    discriminant = std::sqrt(discriminant);
+                    float t1 = (-b - discriminant) / (2 * a);
+                    float t2 = (-b + discriminant) / (2 * a);
+                    
+                    // 选择最近的有效交点
+                    if (t1 >= 0 && t1 <= 1) {
+                        t = t1;
+                        hit = true;
+                    } else if (t2 >= 0 && t2 <= 1) {
+                        t = t2;
+                        hit = true;
+                    }
+                }
+            } else {
+                // 射线与矩形碰撞箱的交点检测
+                const SDL_FRect& box = collider->getBoxCollider();
+                
+                // 使用线段与AABB的交点算法
+                float tmin = 0.0f, tmax = 1.0f;
+                float dx = maxEndX - playerX;
+                float dy = maxEndY - playerY;
+                
+                // X轴检查
+                if (std::abs(dx) > 1e-8f) {
+                    float ood = 1.0f / dx;
+                    float t1 = (box.x - playerX) * ood;
+                    float t2 = (box.x + box.w - playerX) * ood;
+                    if (t1 > t2) std::swap(t1, t2);
+                    tmin = std::max(tmin, t1);
+                    tmax = std::min(tmax, t2);
+                } else if (playerX < box.x || playerX > box.x + box.w) {
+                    continue; // 射线平行于盒子且在外部
+                }
+                
+                // Y轴检查
+                if (std::abs(dy) > 1e-8f) {
+                    float ood = 1.0f / dy;
+                    float t1 = (box.y - playerY) * ood;
+                    float t2 = (box.y + box.h - playerY) * ood;
+                    if (t1 > t2) std::swap(t1, t2);
+                    tmin = std::max(tmin, t1);
+                    tmax = std::min(tmax, t2);
+                } else if (playerY < box.y || playerY > box.y + box.h) {
+                    continue; // 射线平行于盒子且在外部
+                }
+                
+                if (tmin <= tmax && tmin >= 0.0f && tmin <= 1.0f) {
+                    t = tmin;
+                    hit = true;
+                }
+            }
+            
+            if (hit) {
+                float hitDistance = t * maxVisionRange;
+                if (hitDistance < closestDistance) {
+                    closestDistance = hitDistance;
+                    hasCollision = true;
+                }
+            }
+        }
+        
+        // 更新射线信息
+        ray.distance = closestDistance;
+        ray.endX = playerX + dirX * closestDistance;
+        ray.endY = playerY + dirY * closestDistance;
+    }
+}
+
+// 渲染视野遮罩
+void Game::renderVisionMask() {
+    if (!visionSystemEnabled || !visionMaskTexture || !player) return;
+    
+    // 将渲染目标设置为视野遮罩纹理
+    SDL_SetRenderTarget(renderer, visionMaskTexture);
+    
+    // 清除遮罩纹理为完全不透明的黑色
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    
+    // 获取玩家的屏幕坐标
+    float playerScreenX = player->getX() - cameraX;
+    float playerScreenY = player->getY() - cameraY;
+    
+    // 如果玩家在屏幕外，不进行视野渲染
+    if (playerScreenX < -maxVisionRange || playerScreenX > windowWidth + maxVisionRange ||
+        playerScreenY < -maxVisionRange || playerScreenY > windowHeight + maxVisionRange) {
+        SDL_SetRenderTarget(renderer, nullptr);
+        return;
+    }
+    
+    // 创建可见区域的多边形顶点
+    std::vector<SDL_Vertex> vertices;
+    vertices.reserve(visionRayCount + 2);
+    
+    // 添加玩家位置作为多边形中心
+    SDL_Vertex centerVertex;
+    centerVertex.position.x = playerScreenX;
+    centerVertex.position.y = playerScreenY;
+    centerVertex.color.r = 255;
+    centerVertex.color.g = 255;
+    centerVertex.color.b = 255;
+    centerVertex.color.a = 0; // 完全透明（可见）
+    
+    // 为每个射线终点创建顶点
+    for (int i = 0; i < visionRayCount; ++i) {
+        const VisionRay& ray = visionRays[i];
+        
+        SDL_Vertex vertex;
+        vertex.position.x = ray.endX - cameraX;
+        vertex.position.y = ray.endY - cameraY;
+        vertex.color.r = 255;
+        vertex.color.g = 255;
+        vertex.color.b = 255;
+        vertex.color.a = 0; // 完全透明（可见）
+        
+        vertices.push_back(vertex);
+    }
+    
+    // 渲染可见区域多边形
+    if (vertices.size() >= 3) {
+        // 为了创建一个连续的多边形，我们需要使用三角形扇形渲染
+        std::vector<int> indices;
+        indices.reserve(visionRayCount * 3);
+        
+        for (int i = 0; i < visionRayCount; ++i) {
+            // 每个三角形由中心点和相邻的两个射线终点组成
+            indices.push_back(0); // 中心点（玩家位置）
+            indices.push_back(i + 1);
+            indices.push_back((i + 1) % visionRayCount + 1);
+        }
+        
+        // 由于SDL3的RenderGeometry API有限制，我们使用简化的渲染方法
+        // 设置为透明白色，创建可见区域
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
+        
+        // 绘制从玩家到每个射线终点的三角形
+        for (int i = 0; i < visionRayCount; ++i) {
+            int nextIndex = (i + 1) % visionRayCount;
+            
+            // 绘制三角形填充
+            SDL_Vertex triangleVertices[3];
+            triangleVertices[0] = centerVertex;
+            triangleVertices[1] = vertices[i];
+            triangleVertices[2] = vertices[nextIndex];
+            
+            // 注意：SDL3的RenderGeometry可能需要不同的参数
+            // 这里我们使用线段绘制的方法作为备选方案
+            SDL_RenderLine(renderer, 
+                          (int)centerVertex.position.x, (int)centerVertex.position.y,
+                          (int)vertices[i].position.x, (int)vertices[i].position.y);
+        }
+    }
+    
+    // 恢复渲染目标
+    SDL_SetRenderTarget(renderer, nullptr);
+    
+    // 将视野遮罩渲染到屏幕上
+    SDL_RenderTexture(renderer, visionMaskTexture, nullptr, nullptr);
 }

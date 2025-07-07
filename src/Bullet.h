@@ -42,6 +42,9 @@ public:
     bool checkObstacleCollisions(const std::vector<Collider>& obstacles);
     bool checkEntityCollisions(const std::vector<Entity*>& entities);
     
+    // 新增：检查与地形碰撞箱的碰撞（使用指针）
+    bool checkTerrainCollisions(const std::vector<Collider*>& terrainColliders);
+    
     // 获取器
     float getX() const { return x; }
     float getY() const { return y; }

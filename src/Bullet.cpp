@@ -228,3 +228,39 @@ bool Bullet::checkEntityCollisions(const std::vector<Entity*>& entities) {
     }
     return false;
 }
+
+// 新增：检查与地形碰撞箱的碰撞（使用指针）
+bool Bullet::checkTerrainCollisions(const std::vector<Collider*>& terrainColliders) {
+    if (!active) return false;
+    
+    float minT = 1.1f;
+    bool hasCollision = false;
+    
+    for (Collider* collider : terrainColliders) {
+        if (!collider || !collider->getIsActive()) continue;
+        
+        float t;
+        bool hit = false;
+        
+        if (collider->getType() == ColliderType::CIRCLE) {
+            hit = checkLineCircleCollision(prevX, prevY, x, y,
+                                         collider->getCircleX(), collider->getCircleY(),
+                                         collider->getRadius(), t);
+        } else {
+            const SDL_FRect& box = collider->getBoxCollider();
+            hit = checkLineRectCollision(prevX, prevY, x, y,
+                                       box.x, box.y, box.w, box.h, t);
+        }
+        
+        if (hit && t < minT) {
+            minT = t;
+            hasCollision = true;
+        }
+    }
+    
+    if (hasCollision) {
+        handleCollision(minT);
+        return true;
+    }
+    return false;
+}

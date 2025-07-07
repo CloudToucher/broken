@@ -99,6 +99,18 @@ private:
     // 受伤屏幕效果
     float hurtEffectIntensity; // 受伤效果强度 (0.0-1.0)
     float hurtEffectTime;      // 受伤效果持续时间
+    
+    // 视野系统相关成员
+    struct VisionRay {
+        float angle;
+        float distance;
+        float endX, endY;
+    };
+    std::vector<VisionRay> visionRays;           // 视野射线
+    SDL_Texture* visionMaskTexture;              // 视野遮罩纹理
+    int visionRayCount;                          // 射线数量
+    float maxVisionRange;                        // 最大视野范围
+    bool visionSystemEnabled;                    // 视野系统是否启用
 
     // 渲染激光效果
     void renderLaserEffect(SDL_Renderer* renderer, float mouseX, float mouseY, Gun* gun);
@@ -196,6 +208,9 @@ public:
 
     // 新增：获取所有视觉碰撞箱（统一接口）
     std::vector<Collider*> getAllVisionColliders() const;
+    
+    // 新增：获取所有地形碰撞箱（统一接口）
+    std::vector<Collider*> getAllTerrainColliders() const;
 
     // 调试模式相关方法
     void toggleDebugMode() { debugMode = !debugMode; }
@@ -260,6 +275,13 @@ public:
     // 爆炸系统
     void triggerExplosionAtMouse();
     void triggerSmokeAtMouse();
+
+    // 视野系统相关方法
+    void initVisionSystem();
+    void updateVisionRays();
+    void renderVisionMask();
+    void toggleVisionSystem() { visionSystemEnabled = !visionSystemEnabled; }
+    bool isVisionSystemEnabled() const { return visionSystemEnabled; }
 };
 
 #endif // GAME_H
