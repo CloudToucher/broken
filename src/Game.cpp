@@ -2837,3 +2837,51 @@ void Game::triggerSmokeAtMouse() {
     printf("烟雾弹事件已加入队列 - 半径:%.1f格, 持续:%.1f秒, 强度:%.1f, 密度:%.1f\n", 
            smokeRadius / 64.0f, smokeDuration, smokeIntensity, smokeDensity);
 }
+
+// 新增：统一的视觉碰撞箱收集方法
+std::vector<Collider*> Game::getAllVisionColliders() const {
+    std::vector<Collider*> visionColliders;
+    
+    // 1. 收集地图中所有tile的VISION碰撞箱
+    if (gameMap) {
+        // 获取当前可见区域的tile范围（优化性能）
+        int minTileX = static_cast<int>(cameraX / GameConstants::TILE_SIZE) - 2;
+        int maxTileX = static_cast<int>((cameraX + windowWidth / zoomLevel) / GameConstants::TILE_SIZE) + 2;
+        int minTileY = static_cast<int>(cameraY / GameConstants::TILE_SIZE) - 2;
+        int maxTileY = static_cast<int>((cameraY + windowHeight / zoomLevel) / GameConstants::TILE_SIZE) + 2;
+        
+        // 遍历可见区域的tile
+        for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
+            for (int tileY = minTileY; tileY <= maxTileY; tileY++) {
+                Tile* tile = gameMap->getTileAt(tileX * GameConstants::TILE_SIZE, tileY * GameConstants::TILE_SIZE);
+                if (tile && tile->hasColliderWithPurpose(ColliderPurpose::VISION)) {
+                    auto tileVisionColliders = tile->getCollidersByPurpose(ColliderPurpose::VISION);
+                    for (Collider* collider : tileVisionColliders) {
+                        if (collider && collider->getIsActive()) {
+                            visionColliders.push_back(collider);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 2. 收集烟雾颗粒的VISION碰撞箱
+    EventManager& eventManager = EventManager::getInstance();
+    auto smokeEvents = eventManager.getPersistentEventsOfType(EventType::SMOKE_CLOUD);
+    for (const auto& eventPtr : smokeEvents) {
+        if (auto smokeEvent = std::dynamic_pointer_cast<SmokeCloudEvent>(eventPtr)) {
+            if (smokeEvent->isActive()) {
+                // 获取烟雾颗粒的视觉碰撞箱
+                auto smokeVisionColliders = smokeEvent->getActiveVisionColliders();
+                for (Collider* collider : smokeVisionColliders) {
+                    if (collider && collider->getIsActive()) {
+                        visionColliders.push_back(collider);
+                    }
+                }
+            }
+        }
+    }
+    
+    return visionColliders;
+}

@@ -9,8 +9,6 @@
 #include "Map.h"
 #include "Tile.h"
 #include "Constants.h"
-#include "EventManager.h"
-#include "Event.h"
 
 // 构造函数
 Creature::Creature(
@@ -659,13 +657,14 @@ std::vector<ScentSource*> Creature::getSmellableScents(const std::vector<ScentSo
 
 // 射线检测方法
 bool Creature::raycast(float startX, float startY, float endX, float endY) const {
-    // 获取地图中的障碍物
+    // 获取游戏实例
     Game* game = Game::getInstance();
-    if (!game || !game->getMap()) {
-        return true; // 如果没有地图，假设没有阻拦
+    if (!game) {
+        return true; // 如果没有游戏实例，假设没有阻拦
     }
     
-    const std::vector<Collider>& obstacles = game->getMap()->getObstacles();
+    // 获取所有视觉碰撞箱（统一接口）
+    std::vector<Collider*> visionColliders = game->getAllVisionColliders();
     
     // 简单的射线检测实现
     float dx = endX - startX;
@@ -688,23 +687,10 @@ bool Creature::raycast(float startX, float startY, float endX, float endY) const
         float currentX = startX + dx * currentDistance;
         float currentY = startY + dy * currentDistance;
         
-        // 检查当前点是否与任何地形障碍物碰撞
-        for (const Collider& obstacle : obstacles) {
-            if (obstacle.contains(static_cast<int>(currentX), static_cast<int>(currentY))) {
-                return false; // 被地形阻挡
-            }
-        }
-        
-        // 检查是否被烟雾颗粒阻挡（新增）
-        EventManager& eventManager = EventManager::getInstance();
-        // 获取所有活跃的烟雾事件
-        auto smokeEvents = eventManager.getPersistentEventsOfType(EventType::SMOKE_CLOUD);
-        for (const auto& eventPtr : smokeEvents) {
-            if (SmokeCloudEvent* smokeEvent = dynamic_cast<SmokeCloudEvent*>(eventPtr.get())) {
-                // 检查射线是否穿过烟雾区域
-                if (smokeEvent->isPointInSmoke(currentX, currentY)) {
-                    return false; // 被烟雾阻挡
-                }
+        // 检查当前点是否与任何视觉碰撞箱碰撞
+        for (Collider* visionCollider : visionColliders) {
+            if (visionCollider && visionCollider->contains(static_cast<int>(currentX), static_cast<int>(currentY))) {
+                return false; // 被视觉障碍物阻挡
             }
         }
         

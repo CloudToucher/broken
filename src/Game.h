@@ -194,6 +194,9 @@ public:
     // 获取玩家指针
     Player* getPlayer() const { return player.get(); }
 
+    // 新增：获取所有视觉碰撞箱（统一接口）
+    std::vector<Collider*> getAllVisionColliders() const;
+
     // 调试模式相关方法
     void toggleDebugMode() { debugMode = !debugMode; }
     bool isDebugMode() const { return debugMode; }
