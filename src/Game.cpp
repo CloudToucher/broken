@@ -22,6 +22,7 @@
 #include <chrono>
 #include <algorithm>
 #include <map>
+#include <vector>
 
 // 数学常量
 #ifndef M_PI
@@ -1071,9 +1072,6 @@ void Game::render() {
     // 渲染烟雾效果（在角色之后，这样烟雾会覆盖在角色上方）
     renderSmokeEffects();
     
-    // 渲染视觉遮挡黑色覆盖层（在烟雾之后，覆盖被遮挡的区域）
-    renderVisionOcclusion();
-    
     // 渲染攻击范围（如果玩家手持近战武器）
     renderAttackRange();
     
@@ -1088,6 +1086,9 @@ void Game::render() {
     
     // 渲染伤害数字（在缩放环境下）
     renderDamageNumbers();
+    
+    // 渲染战争迷雾效果（在所有游戏对象之后，HUD之前）
+    renderFogOfWar();
     
     // 恢复原始缩放以渲染HUD
     SDL_SetRenderScale(renderer, 1.0f, 1.0f);
@@ -2898,84 +2899,167 @@ std::vector<Collider*> Game::getAllVisionColliders() const {
     return visionColliders;
 }
 
-// 实现视觉遮挡黑色覆盖层渲染
-void Game::renderVisionOcclusion() {
+// 实现战争迷雾渲染方法
+void Game::renderFogOfWar() {
     if (!player) return;
+    
+    // 获取玩家位置
+    float playerX = player->getX();
+    float playerY = player->getY();
     
     // 获取所有视觉碰撞箱
     std::vector<Collider*> visionColliders = getAllVisionColliders();
     if (visionColliders.empty()) return;
     
-    // 设置混合模式以实现覆盖效果
+    // 设置混合模式以实现半透明效果
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     
-    // 为每个视觉碰撞箱渲染黑色覆盖层
+    // 获取当前可见屏幕范围
+    float screenLeft = cameraX;
+    float screenRight = cameraX + windowWidth / zoomLevel;
+    float screenTop = cameraY;
+    float screenBottom = cameraY + windowHeight / zoomLevel;
+    
+    // 为每个视觉碰撞箱计算和渲染阴影区域
     for (Collider* collider : visionColliders) {
         if (!collider || !collider->getIsActive()) continue;
         
-        // 设置黑色覆盖（不透明）
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // 纯黑色，不透明
+        // 计算碰撞箱的边界
+        float colliderLeft, colliderRight, colliderTop, colliderBottom;
+        float colliderCenterX, colliderCenterY;
         
-        // 渲染碰撞箱区域的黑色覆盖层
         if (collider->getType() == ColliderType::CIRCLE) {
-            // 圆形碰撞箱 - 使用多个矩形近似圆形
-            float circleCenterX = collider->getCircleX();
-            float circleCenterY = collider->getCircleY();
+            colliderCenterX = collider->getCircleX();
+            colliderCenterY = collider->getCircleY();
             float radius = collider->getRadius();
-            float screenX = circleCenterX - cameraX;
-            float screenY = circleCenterY - cameraY;
+            colliderLeft = colliderCenterX - radius;
+            colliderRight = colliderCenterX + radius;
+            colliderTop = colliderCenterY - radius;
+            colliderBottom = colliderCenterY + radius;
+        } else {
+            const SDL_FRect& box = collider->getBoxCollider();
+            colliderLeft = box.x;
+            colliderRight = box.x + box.w;
+            colliderTop = box.y;
+            colliderBottom = box.y + box.h;
+            colliderCenterX = box.x + box.w / 2;
+            colliderCenterY = box.y + box.h / 2;
+        }
+        
+        // 检查碰撞箱是否在视野范围内或可能产生阴影
+        if (colliderRight < screenLeft - 500 || colliderLeft > screenRight + 500 ||
+            colliderBottom < screenTop - 500 || colliderTop > screenBottom + 500) {
+            continue; // 太远，跳过
+        }
+        
+        // 计算从玩家到碰撞箱的向量
+        float toColliderX = colliderCenterX - playerX;
+        float toColliderY = colliderCenterY - playerY;
+        float distanceToCollider = std::sqrt(toColliderX * toColliderX + toColliderY * toColliderY);
+        
+        if (distanceToCollider < 32.0f) continue; // 太近，不产生阴影
+        
+        // 计算阴影投射的方向和长度
+        float shadowLength = 800.0f; // 阴影长度
+        float normalizedDirX = toColliderX / distanceToCollider;
+        float normalizedDirY = toColliderY / distanceToCollider;
+        
+        // 计算碰撞箱的四个角点（或圆形的切点）
+        std::vector<std::pair<float, float>> shadowPoints;
+        
+        if (collider->getType() == ColliderType::CIRCLE) {
+            // 圆形：计算从玩家位置到圆的切线
+            float radius = collider->getRadius();
             
-            // 使用多个矩形来近似圆形黑色覆盖效果
-            int steps = 24; // 增加精度以获得更圆润的效果
-            float angleStep = (2.0f * M_PI) / steps;
-            
-            for (int i = 0; i < steps; ++i) {
-                float angle1 = i * angleStep;
-                float angle2 = (i + 1) * angleStep;
+            // 计算切线角度
+            if (distanceToCollider > radius) {
+                float tangentAngle = std::asin(radius / distanceToCollider);
+                float baseAngle = std::atan2(toColliderY, toColliderX);
                 
-                // 计算三角形顶点
-                float x1 = screenX;
-                float y1 = screenY;
-                float x2 = screenX + std::cos(angle1) * radius;
-                float y2 = screenY + std::sin(angle1) * radius;
-                float x3 = screenX + std::cos(angle2) * radius;
-                float y3 = screenY + std::sin(angle2) * radius;
+                // 左切点
+                float leftAngle = baseAngle - tangentAngle;
+                float leftTangentX = colliderCenterX + radius * std::cos(leftAngle + M_PI/2);
+                float leftTangentY = colliderCenterY + radius * std::sin(leftAngle + M_PI/2);
                 
-                // 手动绘制三角形（使用三条线）
-                SDL_RenderLine(renderer, 
-                    static_cast<int>(x1), static_cast<int>(y1),
-                    static_cast<int>(x2), static_cast<int>(y2));
-                SDL_RenderLine(renderer, 
-                    static_cast<int>(x2), static_cast<int>(y2),
-                    static_cast<int>(x3), static_cast<int>(y3));
-                SDL_RenderLine(renderer, 
-                    static_cast<int>(x3), static_cast<int>(y3),
-                    static_cast<int>(x1), static_cast<int>(y1));
+                // 右切点
+                float rightAngle = baseAngle + tangentAngle;
+                float rightTangentX = colliderCenterX + radius * std::cos(rightAngle - M_PI/2);
+                float rightTangentY = colliderCenterY + radius * std::sin(rightAngle - M_PI/2);
                 
-                // 填充三角形区域（使用小矩形填充）
-                float minX = std::min({x1, x2, x3});
-                float maxX = std::max({x1, x2, x3});
-                float minY = std::min({y1, y2, y3});
-                float maxY = std::max({y1, y2, y3});
-                
-                SDL_FRect fillRect = {
-                    minX, minY,
-                    maxX - minX, maxY - minY
-                };
-                SDL_RenderFillRect(renderer, &fillRect);
+                shadowPoints.push_back({leftTangentX, leftTangentY});
+                shadowPoints.push_back({rightTangentX, rightTangentY});
             }
         } else {
-            // 矩形碰撞箱
-            const SDL_FRect& box = collider->getBoxCollider();
-            SDL_FRect screenRect = {
-                box.x - cameraX,
-                box.y - cameraY,
-                box.w,
-                box.h
-            };
+            // 矩形：使用四个角点
+            shadowPoints.push_back({colliderLeft, colliderTop});
+            shadowPoints.push_back({colliderRight, colliderTop});
+            shadowPoints.push_back({colliderRight, colliderBottom});
+            shadowPoints.push_back({colliderLeft, colliderBottom});
+        }
+        
+        // 渲染阴影区域
+        if (!shadowPoints.empty()) {
+            // 设置阴影颜色（黑色半透明）
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180); // 较强的阴影不透明度
             
-            // 渲染黑色矩形覆盖层
-            SDL_RenderFillRect(renderer, &screenRect);
+            // 为每对相邻的阴影点创建阴影三角形
+            for (size_t i = 0; i < shadowPoints.size(); ++i) {
+                float point1X = shadowPoints[i].first;
+                float point1Y = shadowPoints[i].second;
+                
+                size_t nextIndex = (i + 1) % shadowPoints.size();
+                float point2X = shadowPoints[nextIndex].first;
+                float point2Y = shadowPoints[nextIndex].second;
+                
+                // 计算阴影投射的远端点
+                float shadowDir1X = point1X - playerX;
+                float shadowDir1Y = point1Y - playerY;
+                float shadowDist1 = std::sqrt(shadowDir1X * shadowDir1X + shadowDir1Y * shadowDir1Y);
+                if (shadowDist1 > 0) {
+                    shadowDir1X = (shadowDir1X / shadowDist1) * shadowLength;
+                    shadowDir1Y = (shadowDir1Y / shadowDist1) * shadowLength;
+                }
+                
+                float shadowDir2X = point2X - playerX;
+                float shadowDir2Y = point2Y - playerY;
+                float shadowDist2 = std::sqrt(shadowDir2X * shadowDir2X + shadowDir2Y * shadowDir2Y);
+                if (shadowDist2 > 0) {
+                    shadowDir2X = (shadowDir2X / shadowDist2) * shadowLength;
+                    shadowDir2Y = (shadowDir2Y / shadowDist2) * shadowLength;
+                }
+                
+                float farPoint1X = point1X + shadowDir1X;
+                float farPoint1Y = point1Y + shadowDir1Y;
+                float farPoint2X = point2X + shadowDir2X;
+                float farPoint2Y = point2Y + shadowDir2Y;
+                
+                // 转换为屏幕坐标
+                float screenPoint1X = point1X - cameraX;
+                float screenPoint1Y = point1Y - cameraY;
+                float screenPoint2X = point2X - cameraX;
+                float screenPoint2Y = point2Y - cameraY;
+                float screenFarPoint1X = farPoint1X - cameraX;
+                float screenFarPoint1Y = farPoint1Y - cameraY;
+                float screenFarPoint2X = farPoint2X - cameraX;
+                float screenFarPoint2Y = farPoint2Y - cameraY;
+                
+                // 渲染阴影四边形（使用两个三角形）
+                // 三角形1: point1 -> point2 -> farPoint2
+                SDL_Vertex triangle1[3] = {
+                    {{screenPoint1X, screenPoint1Y}, {0, 0, 0, 180}, {0, 0}},
+                    {{screenPoint2X, screenPoint2Y}, {0, 0, 0, 180}, {0, 0}},
+                    {{screenFarPoint2X, screenFarPoint2Y}, {0, 0, 0, 180}, {0, 0}}
+                };
+                SDL_RenderGeometry(renderer, nullptr, triangle1, 3, nullptr, 0);
+                
+                // 三角形2: point1 -> farPoint2 -> farPoint1
+                SDL_Vertex triangle2[3] = {
+                    {{screenPoint1X, screenPoint1Y}, {0, 0, 0, 180}, {0, 0}},
+                    {{screenFarPoint2X, screenFarPoint2Y}, {0, 0, 0, 180}, {0, 0}},
+                    {{screenFarPoint1X, screenFarPoint1Y}, {0, 0, 0, 180}, {0, 0}}
+                };
+                SDL_RenderGeometry(renderer, nullptr, triangle2, 3, nullptr, 0);
+            }
         }
     }
     
