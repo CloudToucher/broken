@@ -98,6 +98,9 @@ public:
     
     // 将网格坐标转换为世界坐标（网格左下角）
     static void gridCoordToWorld(int gridX, int gridY, int& worldX, int& worldY);
+    
+    // 新增：强制更新障碍物列表（公有接口）
+    void forceUpdateObstacles() { updateObstacles(); }
 };
 
 #endif // MAP_H
