@@ -1071,6 +1071,9 @@ void Game::render() {
     // 渲染烟雾效果（在角色之后，这样烟雾会覆盖在角色上方）
     renderSmokeEffects();
     
+    // 渲染视觉遮挡黑色覆盖层（在烟雾之后，覆盖被遮挡的区域）
+    renderVisionOcclusion();
+    
     // 渲染攻击范围（如果玩家手持近战武器）
     renderAttackRange();
     
@@ -1428,11 +1431,7 @@ Bullet* Game::createBullet(float startX, float startY, float dirX, float dirY, f
 // 添加渲染所有子弹的方法实现
 void Game::renderBullets() {
     for (const auto& bullet : bullets) {
-        // 检查子弹是否被视觉碰撞箱遮挡
-        if (!isOccludedByVision(bullet->getX(), bullet->getY())) {
-            bullet->render(renderer, cameraX, cameraY);
-        }
-        // 如果被遮挡，则不渲染（看不到后面的子弹）
+        bullet->render(renderer, cameraX, cameraY);
     }
 }
 
@@ -1826,11 +1825,7 @@ void Game::updateRemotePlayers(float deltaTime) {
 // 渲染远程玩家
 void Game::renderRemotePlayers() {
     for (auto& remotePlayer : remotePlayers) {
-        // 检查远程玩家是否被视觉碰撞箱遮挡
-        if (!isOccludedByVision(remotePlayer->getX(), remotePlayer->getY())) {
-            remotePlayer->render(renderer, cameraX, cameraY);
-        }
-        // 如果被遮挡，则不渲染（看不到后面的远程玩家）
+        remotePlayer->render(renderer, cameraX, cameraY);
     }
 }
 
@@ -1883,11 +1878,7 @@ void Game::updateZombies(float deltaTime) {
 // 渲染所有丧尸
 void Game::renderZombies() {
     for (auto& zombie : zombies) {
-        // 检查丧尸是否被视觉碰撞箱遮挡
-        if (!isOccludedByVision(zombie->getX(), zombie->getY())) {
-            zombie->render(renderer, cameraX, cameraY);
-        }
-        // 如果被遮挡，则不渲染（看不到后面的丧尸）
+        zombie->render(renderer, cameraX, cameraY);
     }
 }
 
@@ -1960,11 +1951,7 @@ void Game::updateCreatures(float deltaTime) {
 // 渲染所有生物
 void Game::renderCreatures() {
     for (auto& creature : creatures) {
-        // 检查生物是否被视觉碰撞箱遮挡
-        if (!isOccludedByVision(creature->getX(), creature->getY())) {
-            creature->render(renderer, cameraX, cameraY);
-        }
-        // 如果被遮挡，则不渲染（看不到后面的生物）
+        creature->render(renderer, cameraX, cameraY);
     }
 }
 
@@ -2911,70 +2898,87 @@ std::vector<Collider*> Game::getAllVisionColliders() const {
     return visionColliders;
 }
 
-// 实现视线遮挡检查方法
-bool Game::isOccludedByVision(float targetX, float targetY) const {
-    if (!player) return false;
-    
-    // 获取玩家位置
-    float playerX = player->getX();
-    float playerY = player->getY();
+// 实现视觉遮挡黑色覆盖层渲染
+void Game::renderVisionOcclusion() {
+    if (!player) return;
     
     // 获取所有视觉碰撞箱
     std::vector<Collider*> visionColliders = getAllVisionColliders();
-    if (visionColliders.empty()) return false;
+    if (visionColliders.empty()) return;
     
-    // 计算从玩家到目标的射线方向和距离
-    float dx = targetX - playerX;
-    float dy = targetY - playerY;
-    float distance = std::sqrt(dx * dx + dy * dy);
+    // 设置混合模式以实现覆盖效果
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     
-    if (distance < 1.0f) {
-        return false; // 距离太近，认为不被遮挡
-    }
-    
-    // 归一化方向向量
-    dx /= distance;
-    dy /= distance;
-    
-    // 简化的射线检测：每隔一定步长检查是否与视觉碰撞箱相交
-    float stepSize = 16.0f; // 检测步长
-    float currentDistance = 0.0f;
-    
-    while (currentDistance < distance) {
-        float currentX = playerX + dx * currentDistance;
-        float currentY = playerY + dy * currentDistance;
+    // 为每个视觉碰撞箱渲染黑色覆盖层
+    for (Collider* collider : visionColliders) {
+        if (!collider || !collider->getIsActive()) continue;
         
-        // 检查当前点是否与任何视觉碰撞箱相交
-        for (Collider* collider : visionColliders) {
-            if (!collider || !collider->getIsActive()) continue;
+        // 设置黑色覆盖（不透明）
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // 纯黑色，不透明
+        
+        // 渲染碰撞箱区域的黑色覆盖层
+        if (collider->getType() == ColliderType::CIRCLE) {
+            // 圆形碰撞箱 - 使用多个矩形近似圆形
+            float circleCenterX = collider->getCircleX();
+            float circleCenterY = collider->getCircleY();
+            float radius = collider->getRadius();
+            float screenX = circleCenterX - cameraX;
+            float screenY = circleCenterY - cameraY;
             
-            bool intersects = false;
-            if (collider->getType() == ColliderType::CIRCLE) {
-                // 圆形碰撞箱检测
-                float circleCenterX = collider->getCircleX();
-                float circleCenterY = collider->getCircleY();
-                float radius = collider->getRadius();
-                
-                float distToCenter = std::sqrt(
-                    (currentX - circleCenterX) * (currentX - circleCenterX) + 
-                    (currentY - circleCenterY) * (currentY - circleCenterY)
-                );
-                
-                intersects = (distToCenter <= radius);
-            } else {
-                // 矩形碰撞箱检测
-                const SDL_FRect& box = collider->getBoxCollider();
-                intersects = (currentX >= box.x && currentX <= box.x + box.w &&
-                             currentY >= box.y && currentY <= box.y + box.h);
-            }
+            // 使用多个矩形来近似圆形黑色覆盖效果
+            int steps = 24; // 增加精度以获得更圆润的效果
+            float angleStep = (2.0f * M_PI) / steps;
             
-            if (intersects) {
-                return true; // 被视觉碰撞箱遮挡
+            for (int i = 0; i < steps; ++i) {
+                float angle1 = i * angleStep;
+                float angle2 = (i + 1) * angleStep;
+                
+                // 计算三角形顶点
+                float x1 = screenX;
+                float y1 = screenY;
+                float x2 = screenX + std::cos(angle1) * radius;
+                float y2 = screenY + std::sin(angle1) * radius;
+                float x3 = screenX + std::cos(angle2) * radius;
+                float y3 = screenY + std::sin(angle2) * radius;
+                
+                // 手动绘制三角形（使用三条线）
+                SDL_RenderLine(renderer, 
+                    static_cast<int>(x1), static_cast<int>(y1),
+                    static_cast<int>(x2), static_cast<int>(y2));
+                SDL_RenderLine(renderer, 
+                    static_cast<int>(x2), static_cast<int>(y2),
+                    static_cast<int>(x3), static_cast<int>(y3));
+                SDL_RenderLine(renderer, 
+                    static_cast<int>(x3), static_cast<int>(y3),
+                    static_cast<int>(x1), static_cast<int>(y1));
+                
+                // 填充三角形区域（使用小矩形填充）
+                float minX = std::min({x1, x2, x3});
+                float maxX = std::max({x1, x2, x3});
+                float minY = std::min({y1, y2, y3});
+                float maxY = std::max({y1, y2, y3});
+                
+                SDL_FRect fillRect = {
+                    minX, minY,
+                    maxX - minX, maxY - minY
+                };
+                SDL_RenderFillRect(renderer, &fillRect);
             }
+        } else {
+            // 矩形碰撞箱
+            const SDL_FRect& box = collider->getBoxCollider();
+            SDL_FRect screenRect = {
+                box.x - cameraX,
+                box.y - cameraY,
+                box.w,
+                box.h
+            };
+            
+            // 渲染黑色矩形覆盖层
+            SDL_RenderFillRect(renderer, &screenRect);
         }
-        
-        currentDistance += stepSize;
     }
     
-    return false; // 没有被遮挡
+    // 恢复默认混合模式
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
