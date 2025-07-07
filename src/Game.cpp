@@ -1086,6 +1086,9 @@ void Game::render() {
     // 渲染伤害数字（在缩放环境下）
     renderDamageNumbers();
     
+    // 渲染视觉遮挡效果（在所有游戏对象之后，HUD之前）
+    renderVisionOcclusion();
+    
     // 恢复原始缩放以渲染HUD
     SDL_SetRenderScale(renderer, 1.0f, 1.0f);
 
@@ -1123,10 +1126,13 @@ void Game::render() {
         // 近战武器不需要弹药信息，保持默认值
         currentAmmo = 0;
         maxAmmo = 0;
+        
+        // 近战武器显示默认鼠标指针（不需要特殊准星）
+        SDL_ShowCursor();
+    } else {
+        // 没有持有物品或其他情况，显示默认鼠标指针
+        SDL_ShowCursor();
     }
-    
-    // 显示默认鼠标指针（砍刀不需要特殊准星）
-    SDL_ShowCursor();
     
     // 渲染 HUD
     hud->render(renderer, player->getHealth(), currentAmmo, maxAmmo);
@@ -2890,4 +2896,104 @@ std::vector<Collider*> Game::getAllVisionColliders() const {
     }
     
     return visionColliders;
+}
+
+// 实现渲染视觉遮挡效果方法
+void Game::renderVisionOcclusion() {
+    if (!player) return;
+    
+    // 获取所有视觉碰撞箱
+    std::vector<Collider*> visionColliders = getAllVisionColliders();
+    if (visionColliders.empty()) return;
+    
+    // 获取玩家位置
+    float playerX = player->getX();
+    float playerY = player->getY();
+    
+    // 设置混合模式以实现半透明效果
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    
+    // 为每个视觉碰撞箱渲染遮挡效果
+    for (Collider* collider : visionColliders) {
+        if (!collider || !collider->getIsActive()) continue;
+        
+        // 计算距离玩家的距离
+        float colliderCenterX, colliderCenterY;
+        if (collider->getType() == ColliderType::CIRCLE) {
+            colliderCenterX = collider->getCircleX();
+            colliderCenterY = collider->getCircleY();
+        } else {
+            const SDL_FRect& box = collider->getBoxCollider();
+            colliderCenterX = box.x + box.w / 2;
+            colliderCenterY = box.y + box.h / 2;
+        }
+        
+        float distanceToPlayer = std::sqrt(
+            (colliderCenterX - playerX) * (colliderCenterX - playerX) + 
+            (colliderCenterY - playerY) * (colliderCenterY - playerY)
+        );
+        
+        // 只对距离玩家一定范围内的碰撞箱进行遮挡渲染（优化性能）
+        const float MAX_OCCLUSION_DISTANCE = 800.0f; // 最大遮挡距离
+        if (distanceToPlayer > MAX_OCCLUSION_DISTANCE) continue;
+        
+        // 根据距离计算不透明度（距离越近，遮挡效果越强）
+        float normalizedDistance = distanceToPlayer / MAX_OCCLUSION_DISTANCE;
+        int baseOpacity = static_cast<int>(255 * (1.0f - normalizedDistance * 0.3f)); // 基础不透明度
+        
+        // 渲染碰撞箱区域的半透明覆盖层
+        if (collider->getType() == ColliderType::CIRCLE) {
+            // 圆形碰撞箱 - 使用多个矩形近似圆形
+            float radius = collider->getRadius();
+            float screenX = colliderCenterX - cameraX;
+            float screenY = colliderCenterY - cameraY;
+            
+            // 设置暗色半透明覆盖（模拟视觉遮挡）
+            SDL_SetRenderDrawColor(renderer, 50, 50, 50, baseOpacity * 0.6f); // 深灰色半透明
+            
+            // 使用多个矩形来近似圆形遮挡效果
+            int steps = 16; // 精度
+            for (int i = 0; i < steps; ++i) {
+                float angle = (2.0f * M_PI * i) / steps;
+                float nextAngle = (2.0f * M_PI * (i + 1)) / steps;
+                
+                // 计算三角形顶点
+                float x1 = screenX;
+                float y1 = screenY;
+                float x2 = screenX + std::cos(angle) * radius;
+                float y2 = screenY + std::sin(angle) * radius;
+                float x3 = screenX + std::cos(nextAngle) * radius;
+                float y3 = screenY + std::sin(nextAngle) * radius;
+                
+                // 渲染三角形（SDL没有直接的三角形函数，用矩形近似）
+                SDL_FRect rect = {
+                    std::min({x1, x2, x3}) - 2,
+                    std::min({y1, y2, y3}) - 2,
+                    std::abs(std::max({x1, x2, x3}) - std::min({x1, x2, x3})) + 4,
+                    std::abs(std::max({y1, y2, y3}) - std::min({y1, y2, y3})) + 4
+                };
+                SDL_RenderFillRect(renderer, &rect);
+            }
+        } else {
+            // 矩形碰撞箱
+            const SDL_FRect& box = collider->getBoxCollider();
+            SDL_FRect screenRect = {
+                box.x - cameraX,
+                box.y - cameraY,
+                box.w,
+                box.h
+            };
+            
+            // 设置暗色半透明覆盖（模拟视觉遮挡）
+            SDL_SetRenderDrawColor(renderer, 50, 50, 50, baseOpacity * 0.6f); // 深灰色半透明
+            SDL_RenderFillRect(renderer, &screenRect);
+            
+            // 添加边缘效果以增强视觉效果
+            SDL_SetRenderDrawColor(renderer, 30, 30, 30, baseOpacity * 0.8f); // 更深的边缘
+            SDL_RenderRect(renderer, &screenRect);
+        }
+    }
+    
+    // 恢复默认混合模式
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
