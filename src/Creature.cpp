@@ -9,6 +9,8 @@
 #include "Map.h"
 #include "Tile.h"
 #include "Constants.h"
+#include "EventManager.h"
+#include "Event.h"
 
 // 构造函数
 Creature::Creature(
@@ -679,17 +681,30 @@ bool Creature::raycast(float startX, float startY, float endX, float endY) const
     dy /= distance;
     
     // 每隔一定步长检查碰撞
-    float stepSize = 16.0f; // 每16像素检查一次
+    float stepSize = 8.0f; // 减小步长，提高精度
     float currentDistance = 0.0f;
     
     while (currentDistance < distance) {
         float currentX = startX + dx * currentDistance;
         float currentY = startY + dy * currentDistance;
         
-        // 检查当前点是否与任何障碍物碰撞
+        // 检查当前点是否与任何地形障碍物碰撞
         for (const Collider& obstacle : obstacles) {
             if (obstacle.contains(static_cast<int>(currentX), static_cast<int>(currentY))) {
-                return false; // 被阻挡
+                return false; // 被地形阻挡
+            }
+        }
+        
+        // 检查是否被烟雾颗粒阻挡（新增）
+        EventManager& eventManager = EventManager::getInstance();
+        // 获取所有活跃的烟雾事件
+        auto smokeEvents = eventManager.getPersistentEventsOfType(EventType::SMOKE_CLOUD);
+        for (const auto& eventPtr : smokeEvents) {
+            if (SmokeCloudEvent* smokeEvent = dynamic_cast<SmokeCloudEvent*>(eventPtr.get())) {
+                // 检查射线是否穿过烟雾区域
+                if (smokeEvent->isPointInSmoke(currentX, currentY)) {
+                    return false; // 被烟雾阻挡
+                }
             }
         }
         

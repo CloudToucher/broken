@@ -373,7 +373,7 @@ void SmokeCloudEvent::update(float deltaTime) {
     
     // 更新所有烟雾颗粒
     for (auto& particle : particles) {
-        particle.update(deltaTime);
+        particle.update(deltaTime, x, y, radius);
     }
     
     // 清理死亡的颗粒
@@ -415,8 +415,8 @@ void SmokeCloudEvent::generateParticles() {
     
     // 基于强度和半径计算颗粒数量
     // 基础公式：颗粒密度 = 强度 * 面积 / 颗粒大小的平方
-    const float PARTICLE_SIZE = 6.4f; // 0.1格 = 6.4像素（64像素每格）
-    const float PARTICLE_DENSITY_MULTIPLIER = 0.3f; // 调整密度
+    const float PARTICLE_SIZE = 25.6f; // 0.4格 = 25.6像素（64像素每格）
+    const float PARTICLE_DENSITY_MULTIPLIER = 0.2f; // 调整密度（因为颗粒变大，降低密度）
     
     float area = M_PI * radius * radius;
     int baseParticleCount = (int)(area * intensity * PARTICLE_DENSITY_MULTIPLIER / (PARTICLE_SIZE * PARTICLE_SIZE));
@@ -445,7 +445,7 @@ void SmokeCloudEvent::generateParticles() {
         float particleY = y + particleRadius * std::sin(angle);
         float particleLifespan = lifespanDist(gen);
         
-        particles.emplace_back(particleX, particleY, PARTICLE_SIZE, particleLifespan);
+        particles.emplace_back(particleX, particleY, PARTICLE_SIZE, particleLifespan, x, y);
     }
     
     particlesGenerated = true;

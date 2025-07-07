@@ -1065,11 +1065,11 @@ void Game::render() {
     FragmentManager& fragmentManager = FragmentManager::getInstance();
     fragmentManager.render(renderer, cameraX, cameraY);
 
-    // 渲染烟雾效果
-    renderSmokeEffects();
-
     // 渲染角色
     player->render(renderer, cameraX, cameraY);
+    
+    // 渲染烟雾效果（在角色之后，这样烟雾会覆盖在角色上方）
+    renderSmokeEffects();
     
     // 渲染攻击范围（如果玩家手持近战武器）
     renderAttackRange();

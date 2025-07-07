@@ -7,6 +7,8 @@
 #include <functional>
 #include <chrono>
 #include <vector>
+#include <random>
+#include <cmath>
 #include <SDL3/SDL.h>
 #include "Damage.h"
 #include "Collider.h"
@@ -314,14 +316,26 @@ private:
     // 烟雾颗粒系统
     struct SmokeParticle {
         float x, y;              // 位置
+        float vx, vy;            // 速度向量
         float size;              // 大小（半径）
         float opacity;           // 不透明度 (0.0-1.0)
         float lifespan;          // 生命周期
         float maxLifespan;       // 最大生命周期
+        float distanceFromCenter; // 距离烟雾中心的距离（用于边缘淡化）
         std::unique_ptr<Collider> visionCollider; // 视觉碰撞箱
         
-        SmokeParticle(float px, float py, float pSize, float maxLife)
-            : x(px), y(py), size(pSize), opacity(1.0f), lifespan(0.0f), maxLifespan(maxLife) {
+        SmokeParticle(float px, float py, float pSize, float maxLife, float centerX, float centerY)
+            : x(px), y(py), vx(0.0f), vy(0.0f), size(pSize), opacity(1.0f), lifespan(0.0f), maxLifespan(maxLife) {
+            // 计算距离中心的距离
+            distanceFromCenter = std::sqrt((px - centerX) * (px - centerX) + (py - centerY) * (py - centerY));
+            
+            // 添加随机速度（模拟烟雾飘动）
+            static std::random_device rd;
+            static std::mt19937 gen(rd());
+            std::uniform_real_distribution<float> speedDist(-10.0f, 10.0f);
+            vx = speedDist(gen);
+            vy = speedDist(gen);
+            
             // 创建视觉碰撞箱
             visionCollider = std::make_unique<Collider>(
                 x - size/2, y - size/2, size, size,
@@ -329,12 +343,38 @@ private:
             );
         }
         
-        void update(float deltaTime) {
+        void update(float deltaTime, float smokeCenterX, float smokeCenterY, float smokeRadius) {
             lifespan += deltaTime;
-            // 计算不透明度（生命周期末期逐渐消散）
+            
+            // 更新位置（动态移动）
+            x += vx * deltaTime;
+            y += vy * deltaTime;
+            
+            // 重新计算距离中心的距离
+            distanceFromCenter = std::sqrt((x - smokeCenterX) * (x - smokeCenterX) + (y - smokeCenterY) * (y - smokeCenterY));
+            
+            // 计算基础不透明度（生命周期末期逐渐消散）
             float lifeFraction = lifespan / maxLifespan;
-            opacity = 1.0f - lifeFraction;
+            float baseOpacity = 1.0f - lifeFraction;
+            
+            // 边缘淡化效果：距离中心越远，不透明度越低
+            float edgeFadeFactor = 1.0f;
+            if (smokeRadius > 0.0f) {
+                float normalizedDistance = distanceFromCenter / smokeRadius;
+                if (normalizedDistance > 0.7f) {
+                    // 在70%半径之外开始淡化
+                    edgeFadeFactor = 1.0f - ((normalizedDistance - 0.7f) / 0.3f);
+                    edgeFadeFactor = std::max(0.0f, edgeFadeFactor);
+                }
+            }
+            
+            // 组合不透明度
+            opacity = baseOpacity * edgeFadeFactor;
             if (opacity < 0.0f) opacity = 0.0f;
+            
+            // 随时间减缓速度（模拟空气阻力）
+            vx *= 0.995f;
+            vy *= 0.995f;
             
             // 更新碰撞箱位置
             if (visionCollider) {
