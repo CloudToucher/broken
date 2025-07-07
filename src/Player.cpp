@@ -291,12 +291,12 @@ void Player::holdItem(std::unique_ptr<Item> item) {
     }
 
     // 设置新的手持物品
-    heldItem = std::move(item);
+        heldItem = std::move(item);
     std::cout << "玩家手持: " << heldItem->getName() << " (注意：这是手持，不是装备到身体部位)" << std::endl;
 }
 
 void Player::releaseHeldItem() {
-    if (heldItem) {
+        if (heldItem) {
         std::cout << "玩家放下手持物品: " << heldItem->getName() << std::endl;
         heldItem.reset();
     } else {

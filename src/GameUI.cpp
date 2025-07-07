@@ -1561,11 +1561,11 @@ bool GameUI::handleClick(int mouseX, int mouseY, Player* player, float windowWid
                             dragStartY = mouseY;
                         } else {
                             // 如果无法识别拖放源，回退到原有逻辑
-                            isDragging = true;
-                            draggedItem = clickedItem;
-                            dragStartX = mouseX;
-                            dragStartY = mouseY;
-                            sourceStorage = findStorageByCoordinates(mouseX, mouseY);
+                        isDragging = true;
+                        draggedItem = clickedItem;
+                        dragStartX = mouseX;
+                        dragStartY = mouseY;
+                        sourceStorage = findStorageByCoordinates(mouseX, mouseY);
                         }
                         
                         // 更新存储空间坐标映射

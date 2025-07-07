@@ -173,7 +173,7 @@ public:
     void unequipItem(EquipSlot slot, std::function<void(std::unique_ptr<Item>)> callback = nullptr) {
         unwearEquipment(slot, std::move(callback));
     }
-    
+
     // 重写渲染方法以渲染手持物品
     void render(SDL_Renderer* renderer, float cameraX, float cameraY) override;
     

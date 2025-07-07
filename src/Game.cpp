@@ -839,6 +839,11 @@ void Game::handleEvents() {
                     triggerExplosionAtMouse();
                 }
                 break;
+            case SDLK_H: // H键触发烟雾弹
+                if (player) {
+                    triggerSmokeAtMouse();
+                }
+                break;
             case SDLK_TAB: // Tab键切换背包界面
                 togglePlayerUI();
                 break;
@@ -902,7 +907,7 @@ void Game::update() {
     
     // 处理事件队列
     EventManager& eventManager = EventManager::getInstance();
-    eventManager.processEvents();
+    eventManager.processEvents(adjustedDeltaTime);
     
     // 更新弹片系统
     FragmentManager& fragmentManager = FragmentManager::getInstance();
@@ -1059,6 +1064,9 @@ void Game::render() {
     // 渲染所有弹片
     FragmentManager& fragmentManager = FragmentManager::getInstance();
     fragmentManager.render(renderer, cameraX, cameraY);
+
+    // 渲染烟雾效果
+    renderSmokeEffects();
 
     // 渲染角色
     player->render(renderer, cameraX, cameraY);
@@ -1482,6 +1490,27 @@ void Game::renderColliders() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
     for (const auto& obstacle : obstacles) {
         obstacle.render(renderer, cameraX, cameraY);
+    }
+}
+
+// 实现renderSmokeEffects方法，渲染所有活跃的烟雾事件
+void Game::renderSmokeEffects() {
+    // 获取事件管理器
+    EventManager& eventManager = EventManager::getInstance();
+    
+    // 获取所有持续事件
+    auto persistentEvents = eventManager.getAllPersistentEvents();
+    
+    // 渲染所有活跃的烟雾云事件
+    for (const auto& event : persistentEvents) {
+        if (event && event->getType() == EventType::SMOKE_CLOUD && event->isActive()) {
+            // 将事件转换为SmokeCloudEvent
+            auto smokeEvent = std::dynamic_pointer_cast<SmokeCloudEvent>(event);
+            if (smokeEvent) {
+                // 渲染烟雾效果
+                smokeEvent->renderSmoke(renderer, cameraX, cameraY);
+            }
+        }
     }
 }
 
@@ -2747,6 +2776,9 @@ void Game::triggerExplosionAtMouse() {
     explosionDamages.push_back({DamageType::HEAT, 20});  // 20点高温伤害
     explosionDamages.push_back({DamageType::BLUNT, 20}); // 20点钝击伤害
     
+    // 创建事件来源（玩家）
+    EventSource explosionSource = EventSource::FromEntity(player.get(), "玩家手动触发");
+    
     auto explosionEvent = std::make_shared<ExplosionEvent>(
         worldMouseX, worldMouseY,    // 位置：鼠标世界坐标
         5.0f,                        // 半径：5格（像素转换在事件内部处理）
@@ -2754,8 +2786,8 @@ void Game::triggerExplosionAtMouse() {
         50,                          // 弹片数量
         20,                          // 弹片伤害（刺击伤害）
         7.0f,                        // 弹片射程：7格（像素转换在事件内部处理）
-        "手动爆炸",                 // 爆炸类型
-        player.get()                 // 爆炸源（玩家）
+        explosionSource,             // 事件来源
+        "手动爆炸"                  // 爆炸类型
     );
     
     // 触发事件
@@ -2763,4 +2795,45 @@ void Game::triggerExplosionAtMouse() {
     eventManager.queueEvent(explosionEvent);
     
     printf("爆炸事件已加入队列\n");
+}
+
+// 在鼠标位置触发烟雾弹
+void Game::triggerSmokeAtMouse() {
+    if (!player) {
+        printf("错误：没有找到玩家对象\n");
+        return;
+    }
+    
+    // 获取鼠标位置
+    float mouseX, mouseY;
+    SDL_GetMouseState(&mouseX, &mouseY);
+    
+    // 将鼠标坐标转换为世界坐标
+    float worldMouseX = mouseX / zoomLevel + cameraX;
+    float worldMouseY = mouseY / zoomLevel + cameraY;
+    
+    printf("在鼠标位置触发烟雾弹: (%.1f, %.1f)\n", worldMouseX, worldMouseY);
+    
+    // 烟雾弹参数
+    float smokeRadius = 8.0f * 64.0f;      // 8格半径，转换为像素
+    float smokeDuration = 15.0f;            // 持续15秒
+    float smokeIntensity = 2.0f;            // 高强度烟雾
+    float smokeDensity = 0.9f;              // 高密度烟雾
+    
+    // 创建事件来源（玩家）
+    EventSource smokeSource = EventSource::FromEntity(player.get(), "玩家投掷烟雾弹");
+    
+    // 触发烟雾云事件
+    EventManager& eventManager = EventManager::getInstance();
+    eventManager.triggerSmokeCloud(
+        worldMouseX, worldMouseY,    // 位置：鼠标世界坐标
+        smokeRadius,                 // 半径：8格
+        smokeDuration,               // 持续时间：15秒
+        smokeSource,                 // 事件来源
+        smokeIntensity,              // 强度：2.0
+        smokeDensity                 // 密度：0.9
+    );
+    
+    printf("烟雾弹事件已加入队列 - 半径:%.1f格, 持续:%.1f秒, 强度:%.1f, 密度:%.1f\n", 
+           smokeRadius / 64.0f, smokeDuration, smokeIntensity, smokeDensity);
 }

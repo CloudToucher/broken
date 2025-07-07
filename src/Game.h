@@ -198,6 +198,7 @@ public:
     void toggleDebugMode() { debugMode = !debugMode; }
     bool isDebugMode() const { return debugMode; }
     void renderColliders(); // 渲染所有碰撞箱
+    void renderSmokeEffects(); // 渲染烟雾效果
     
     // 游戏UI相关方法
     GameUI* getGameUI() const { return gameUI.get(); }
@@ -255,6 +256,7 @@ public:
     
     // 爆炸系统
     void triggerExplosionAtMouse();
+    void triggerSmokeAtMouse();
 };
 
 #endif // GAME_H
