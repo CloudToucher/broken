@@ -203,6 +203,7 @@ public:
     void renderColliders(); // 渲染所有碰撞箱
     void renderSmokeEffects(); // 渲染烟雾效果
     void renderFogOfWar(); // 渲染战争迷雾效果（被视觉碰撞箱遮挡的区域）
+    bool isInShadow(float x, float y) const; // 检查点是否在视觉碰撞箱的阴影区域内
     
     // 游戏UI相关方法
     GameUI* getGameUI() const { return gameUI.get(); }

@@ -1066,8 +1066,11 @@ void Game::render() {
     FragmentManager& fragmentManager = FragmentManager::getInstance();
     fragmentManager.render(renderer, cameraX, cameraY);
 
-    // 渲染角色
-    player->render(renderer, cameraX, cameraY);
+    // 渲染角色（检查是否在阴影区域内）
+    if (!isInShadow(player->getX(), player->getY())) {
+        player->render(renderer, cameraX, cameraY);
+    }
+    // 如果玩家在阴影中，则不渲染（被视觉遮挡隐藏）
     
     // 渲染烟雾效果（在角色之后，这样烟雾会覆盖在角色上方）
     renderSmokeEffects();
@@ -1432,7 +1435,11 @@ Bullet* Game::createBullet(float startX, float startY, float dirX, float dirY, f
 // 添加渲染所有子弹的方法实现
 void Game::renderBullets() {
     for (const auto& bullet : bullets) {
-        bullet->render(renderer, cameraX, cameraY);
+        // 检查子弹是否在视觉阴影区域内
+        if (!isInShadow(bullet->getX(), bullet->getY())) {
+            bullet->render(renderer, cameraX, cameraY);
+        }
+        // 如果在阴影中，则不渲染（被视觉遮挡隐藏）
     }
 }
 
@@ -1826,7 +1833,11 @@ void Game::updateRemotePlayers(float deltaTime) {
 // 渲染远程玩家
 void Game::renderRemotePlayers() {
     for (auto& remotePlayer : remotePlayers) {
-        remotePlayer->render(renderer, cameraX, cameraY);
+        // 检查远程玩家是否在视觉阴影区域内
+        if (!isInShadow(remotePlayer->getX(), remotePlayer->getY())) {
+            remotePlayer->render(renderer, cameraX, cameraY);
+        }
+        // 如果在阴影中，则不渲染（被视觉遮挡隐藏）
     }
 }
 
@@ -1879,7 +1890,11 @@ void Game::updateZombies(float deltaTime) {
 // 渲染所有丧尸
 void Game::renderZombies() {
     for (auto& zombie : zombies) {
-        zombie->render(renderer, cameraX, cameraY);
+        // 检查丧尸是否在视觉阴影区域内
+        if (!isInShadow(zombie->getX(), zombie->getY())) {
+            zombie->render(renderer, cameraX, cameraY);
+        }
+        // 如果在阴影中，则不渲染（被视觉遮挡隐藏）
     }
 }
 
@@ -1952,7 +1967,11 @@ void Game::updateCreatures(float deltaTime) {
 // 渲染所有生物
 void Game::renderCreatures() {
     for (auto& creature : creatures) {
-        creature->render(renderer, cameraX, cameraY);
+        // 检查生物是否在视觉阴影区域内
+        if (!isInShadow(creature->getX(), creature->getY())) {
+            creature->render(renderer, cameraX, cameraY);
+        }
+        // 如果在阴影中，则不渲染（被视觉遮挡隐藏）
     }
 }
 
@@ -2999,8 +3018,8 @@ void Game::renderFogOfWar() {
         
         // 渲染阴影区域
         if (!shadowPoints.empty()) {
-            // 设置阴影颜色（黑色半透明）
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180); // 较强的阴影不透明度
+                         // 设置阴影颜色（半透明灰黑色）
+             SDL_SetRenderDrawColor(renderer, 64, 64, 64, 150); // 半透明灰黑色迷雾
             
             // 为每对相邻的阴影点创建阴影三角形
             for (size_t i = 0; i < shadowPoints.size(); ++i) {
@@ -3043,21 +3062,21 @@ void Game::renderFogOfWar() {
                 float screenFarPoint2X = farPoint2X - cameraX;
                 float screenFarPoint2Y = farPoint2Y - cameraY;
                 
-                // 渲染阴影四边形（使用两个三角形）
-                // 三角形1: point1 -> point2 -> farPoint2
-                SDL_Vertex triangle1[3] = {
-                    {{screenPoint1X, screenPoint1Y}, {0, 0, 0, 180}, {0, 0}},
-                    {{screenPoint2X, screenPoint2Y}, {0, 0, 0, 180}, {0, 0}},
-                    {{screenFarPoint2X, screenFarPoint2Y}, {0, 0, 0, 180}, {0, 0}}
-                };
-                SDL_RenderGeometry(renderer, nullptr, triangle1, 3, nullptr, 0);
-                
-                // 三角形2: point1 -> farPoint2 -> farPoint1
-                SDL_Vertex triangle2[3] = {
-                    {{screenPoint1X, screenPoint1Y}, {0, 0, 0, 180}, {0, 0}},
-                    {{screenFarPoint2X, screenFarPoint2Y}, {0, 0, 0, 180}, {0, 0}},
-                    {{screenFarPoint1X, screenFarPoint1Y}, {0, 0, 0, 180}, {0, 0}}
-                };
+                                 // 渲染阴影四边形（使用两个三角形）
+                 // 三角形1: point1 -> point2 -> farPoint2
+                 SDL_Vertex triangle1[3] = {
+                     {{screenPoint1X, screenPoint1Y}, {64, 64, 64, 150}, {0, 0}},
+                     {{screenPoint2X, screenPoint2Y}, {64, 64, 64, 150}, {0, 0}},
+                     {{screenFarPoint2X, screenFarPoint2Y}, {64, 64, 64, 150}, {0, 0}}
+                 };
+                 SDL_RenderGeometry(renderer, nullptr, triangle1, 3, nullptr, 0);
+                 
+                 // 三角形2: point1 -> farPoint2 -> farPoint1
+                 SDL_Vertex triangle2[3] = {
+                     {{screenPoint1X, screenPoint1Y}, {64, 64, 64, 150}, {0, 0}},
+                     {{screenFarPoint2X, screenFarPoint2Y}, {64, 64, 64, 150}, {0, 0}},
+                     {{screenFarPoint1X, screenFarPoint1Y}, {64, 64, 64, 150}, {0, 0}}
+                 };
                 SDL_RenderGeometry(renderer, nullptr, triangle2, 3, nullptr, 0);
             }
         }
@@ -3065,4 +3084,121 @@ void Game::renderFogOfWar() {
     
     // 恢复默认混合模式
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+// 检查点是否在视觉碰撞箱的阴影区域内
+bool Game::isInShadow(float x, float y) const {
+    if (!player) return false;
+    
+    // 获取玩家位置
+    float playerX = player->getX();
+    float playerY = player->getY();
+    
+    // 获取所有视觉碰撞箱
+    std::vector<Collider*> visionColliders = getAllVisionColliders();
+    if (visionColliders.empty()) return false;
+    
+    for (Collider* collider : visionColliders) {
+        if (!collider || !collider->getIsActive()) continue;
+        
+        // 计算碰撞箱的中心和边界
+        float colliderCenterX, colliderCenterY;
+        float colliderLeft, colliderRight, colliderTop, colliderBottom;
+        
+        if (collider->getType() == ColliderType::CIRCLE) {
+            colliderCenterX = collider->getCircleX();
+            colliderCenterY = collider->getCircleY();
+            float radius = collider->getRadius();
+            colliderLeft = colliderCenterX - radius;
+            colliderRight = colliderCenterX + radius;
+            colliderTop = colliderCenterY - radius;
+            colliderBottom = colliderCenterY + radius;
+        } else {
+            const SDL_FRect& box = collider->getBoxCollider();
+            colliderLeft = box.x;
+            colliderRight = box.x + box.w;
+            colliderTop = box.y;
+            colliderBottom = box.y + box.h;
+            colliderCenterX = box.x + box.w / 2;
+            colliderCenterY = box.y + box.h / 2;
+        }
+        
+        // 计算从玩家到碰撞箱的向量
+        float toColliderX = colliderCenterX - playerX;
+        float toColliderY = colliderCenterY - playerY;
+        float distanceToCollider = std::sqrt(toColliderX * toColliderX + toColliderY * toColliderY);
+        
+        if (distanceToCollider < 32.0f) continue; // 太近，不产生阴影
+        
+        // 计算从玩家到目标点的向量
+        float toTargetX = x - playerX;
+        float toTargetY = y - playerY;
+        float distanceToTarget = std::sqrt(toTargetX * toTargetX + toTargetY * toTargetY);
+        
+        // 如果目标点比碰撞箱更近，不可能在阴影中
+        if (distanceToTarget < distanceToCollider) continue;
+        
+        // 检查目标点是否在碰撞箱产生的阴影扇形区域内
+        bool inShadow = false;
+        
+        if (collider->getType() == ColliderType::CIRCLE) {
+            // 圆形碰撞箱：检查是否在切线形成的阴影扇形内
+            float radius = collider->getRadius();
+            
+            if (distanceToCollider > radius) {
+                // 计算切线角度
+                float tangentAngle = std::asin(radius / distanceToCollider);
+                float baseAngle = std::atan2(toColliderY, toColliderX);
+                float targetAngle = std::atan2(toTargetY, toTargetX);
+                
+                // 计算角度差（处理角度环绕）
+                float angleDiff = targetAngle - baseAngle;
+                while (angleDiff > M_PI) angleDiff -= 2 * M_PI;
+                while (angleDiff < -M_PI) angleDiff += 2 * M_PI;
+                
+                // 检查是否在阴影扇形内
+                if (std::abs(angleDiff) <= tangentAngle) {
+                    inShadow = true;
+                }
+            }
+        } else {
+            // 矩形碰撞箱：检查是否在四个角点形成的阴影区域内
+            std::vector<std::pair<float, float>> corners = {
+                {colliderLeft, colliderTop},
+                {colliderRight, colliderTop},
+                {colliderRight, colliderBottom},
+                {colliderLeft, colliderBottom}
+            };
+            
+            // 计算目标点相对于玩家的角度
+            float targetAngle = std::atan2(toTargetY, toTargetX);
+            
+            // 计算矩形四个角相对于玩家的角度范围
+            float minAngle = 2 * M_PI, maxAngle = -2 * M_PI;
+            for (const auto& corner : corners) {
+                float cornerAngle = std::atan2(corner.second - playerY, corner.first - playerX);
+                if (cornerAngle < minAngle) minAngle = cornerAngle;
+                if (cornerAngle > maxAngle) maxAngle = cornerAngle;
+            }
+            
+            // 处理角度环绕问题
+            if (maxAngle - minAngle > M_PI) {
+                // 跨越180度边界的情况
+                if (targetAngle >= minAngle || targetAngle <= maxAngle - 2 * M_PI) {
+                    inShadow = true;
+                }
+            } else {
+                // 正常情况
+                if (targetAngle >= minAngle && targetAngle <= maxAngle) {
+                    inShadow = true;
+                }
+            }
+        }
+        
+        if (inShadow) {
+            return true; // 在任何一个阴影中就返回true
+        }
+    }
+    
+    return false; // 不在任何阴影中
 }
