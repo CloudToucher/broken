@@ -202,7 +202,7 @@ public:
     bool isDebugMode() const { return debugMode; }
     void renderColliders(); // 渲染所有碰撞箱
     void renderSmokeEffects(); // 渲染烟雾效果
-    void renderVisionOcclusion(); // 渲染视觉遮挡效果
+    bool isOccludedByVision(float targetX, float targetY) const; // 检查目标是否被视觉碰撞箱遮挡
     
     // 游戏UI相关方法
     GameUI* getGameUI() const { return gameUI.get(); }
