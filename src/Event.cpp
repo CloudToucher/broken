@@ -415,8 +415,8 @@ void SmokeCloudEvent::generateParticles() {
     
     // 基于强度和半径计算颗粒数量
     // 基础公式：颗粒密度 = 强度 * 面积 / 颗粒大小的平方
-    const float PARTICLE_SIZE = 32.0f; // 0.5格 = 32像素（64像素每格）- 增加颗粒大小
-    const float PARTICLE_DENSITY_MULTIPLIER = 0.35f; // 增加密度倍数，使烟雾更密集
+    const float PARTICLE_SIZE = 20.0f; // 更小的颗粒（约0.31格）
+    const float PARTICLE_DENSITY_MULTIPLIER = 1.75f; // 增加5倍密度，使烟雾更密集
     
     float area = M_PI * radius * radius;
     int baseParticleCount = (int)(area * intensity * PARTICLE_DENSITY_MULTIPLIER / (PARTICLE_SIZE * PARTICLE_SIZE));

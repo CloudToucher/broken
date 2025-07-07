@@ -2930,8 +2930,10 @@ void Game::renderFogOfWar() {
     std::vector<Collider*> visionColliders = getAllVisionColliders();
     if (visionColliders.empty()) return;
     
-    // 设置混合模式以实现半透明效果
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    // 收集所有阴影三角形
+    std::vector<SDL_Vertex> allShadowVertices;
+    std::vector<int> allShadowIndices;
+    int vertexOffset = 0;
     
     // 获取当前可见屏幕范围
     float screenLeft = cameraX;
@@ -2939,7 +2941,7 @@ void Game::renderFogOfWar() {
     float screenTop = cameraY;
     float screenBottom = cameraY + windowHeight / zoomLevel;
     
-    // 为每个视觉碰撞箱计算和渲染阴影区域
+    // 为每个视觉碰撞箱计算阴影区域
     for (Collider* collider : visionColliders) {
         if (!collider || !collider->getIsActive()) continue;
         
@@ -2980,8 +2982,6 @@ void Game::renderFogOfWar() {
         
         // 计算阴影投射的方向和长度
         float shadowLength = 800.0f; // 阴影长度
-        float normalizedDirX = toColliderX / distanceToCollider;
-        float normalizedDirY = toColliderY / distanceToCollider;
         
         // 计算碰撞箱的四个角点（或圆形的切点）
         std::vector<std::pair<float, float>> shadowPoints;
@@ -3016,12 +3016,8 @@ void Game::renderFogOfWar() {
             shadowPoints.push_back({colliderLeft, colliderBottom});
         }
         
-        // 渲染阴影区域
+        // 收集阴影三角形顶点
         if (!shadowPoints.empty()) {
-                         // 设置阴影颜色（半透明灰黑色）
-             SDL_SetRenderDrawColor(renderer, 64, 64, 64, 150); // 半透明灰黑色迷雾
-            
-            // 为每对相邻的阴影点创建阴影三角形
             for (size_t i = 0; i < shadowPoints.size(); ++i) {
                 float point1X = shadowPoints[i].first;
                 float point1Y = shadowPoints[i].second;
@@ -3062,28 +3058,43 @@ void Game::renderFogOfWar() {
                 float screenFarPoint2X = farPoint2X - cameraX;
                 float screenFarPoint2Y = farPoint2Y - cameraY;
                 
-                                 // 渲染阴影四边形（使用两个三角形）
-                 // 三角形1: point1 -> point2 -> farPoint2
-                 SDL_Vertex triangle1[3] = {
-                     {{screenPoint1X, screenPoint1Y}, {64, 64, 64, 150}, {0, 0}},
-                     {{screenPoint2X, screenPoint2Y}, {64, 64, 64, 150}, {0, 0}},
-                     {{screenFarPoint2X, screenFarPoint2Y}, {64, 64, 64, 150}, {0, 0}}
-                 };
-                 SDL_RenderGeometry(renderer, nullptr, triangle1, 3, nullptr, 0);
-                 
-                 // 三角形2: point1 -> farPoint2 -> farPoint1
-                 SDL_Vertex triangle2[3] = {
-                     {{screenPoint1X, screenPoint1Y}, {64, 64, 64, 150}, {0, 0}},
-                     {{screenFarPoint2X, screenFarPoint2Y}, {64, 64, 64, 150}, {0, 0}},
-                     {{screenFarPoint1X, screenFarPoint1Y}, {64, 64, 64, 150}, {0, 0}}
-                 };
-                SDL_RenderGeometry(renderer, nullptr, triangle2, 3, nullptr, 0);
+                // 添加阴影四边形的顶点（使用两个三角形）
+                // 三角形1: point1 -> point2 -> farPoint2
+                allShadowVertices.push_back({{screenPoint1X, screenPoint1Y}, {0.25f, 0.25f, 0.25f, 0.06f}, {0, 0}});
+                allShadowVertices.push_back({{screenPoint2X, screenPoint2Y}, {0.25f, 0.25f, 0.25f, 0.06f}, {0, 0}});
+                allShadowVertices.push_back({{screenFarPoint2X, screenFarPoint2Y}, {0.25f, 0.25f, 0.25f, 0.06f}, {0, 0}});
+                
+                allShadowIndices.push_back(vertexOffset);
+                allShadowIndices.push_back(vertexOffset + 1);
+                allShadowIndices.push_back(vertexOffset + 2);
+                vertexOffset += 3;
+                
+                // 三角形2: point1 -> farPoint2 -> farPoint1
+                allShadowVertices.push_back({{screenPoint1X, screenPoint1Y}, {0.25f, 0.25f, 0.25f, 0.06f}, {0, 0}});
+                allShadowVertices.push_back({{screenFarPoint2X, screenFarPoint2Y}, {0.25f, 0.25f, 0.25f, 0.06f}, {0, 0}});
+                allShadowVertices.push_back({{screenFarPoint1X, screenFarPoint1Y}, {0.25f, 0.25f, 0.25f, 0.06f}, {0, 0}});
+                
+                allShadowIndices.push_back(vertexOffset);
+                allShadowIndices.push_back(vertexOffset + 1);
+                allShadowIndices.push_back(vertexOffset + 2);
+                vertexOffset += 3;
             }
         }
     }
     
-    // 恢复默认混合模式
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    // 如果有阴影区域，统一渲染所有阴影
+    if (!allShadowVertices.empty()) {
+        // 设置混合模式以实现半透明效果
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        
+        // 一次性渲染所有阴影几何体
+        SDL_RenderGeometry(renderer, nullptr, 
+                          allShadowVertices.data(), static_cast<int>(allShadowVertices.size()),
+                          allShadowIndices.data(), static_cast<int>(allShadowIndices.size()));
+        
+        // 恢复默认混合模式
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    }
 }
 
 // 检查点是否在视觉碰撞箱的阴影区域内
